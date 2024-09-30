@@ -45,6 +45,7 @@ FSI_Col <- FSI %>% filter(Country == "Colombia")
 disaster_Col <- disaster %>% filter(Country == "Colombia") # 198
 conflict_Col <- conflict_LA %>% filter(country == "Colombia") # 28,230
 
+
 IPC_CAR <- IPC %>% filter(Country == "Central African Republic") # 515
 FSI_CAR <- FSI %>% filter(Country == "Central African Republic")
 disaster_CAR <- disaster %>% filter(Country == "Central African Republic") # 66
@@ -55,6 +56,15 @@ disaster_CAR$Location %>% head(10)
 
 # The Central African Republic is divided into 20 prefectures (14 administrative prefectures and 2 economic prefectures ) and one autonomous commune.
 # The prefectures (préfectures) are further divided into 84 sub-prefectures (sous-préfectures).
+tot_population_CAR <- read_xlsx("Food Security/Acute Food Security Phase Classification (IPC) Data 2017-2024.xlsx") %>%
+  filter(grepl("Central African Republic", Country) & is.na(Area_id))
+tot_population_CAR$Country <- "Central African Republic"
+tot_population_CAR$Date <- as.Date(paste(tot_population_CAR$Date, "01"), format="%b %Y %d")
+tot_population_CAR$Year <- year(tot_population_CAR$Date) %>% as.factor
+tot_population_CAR$Month <- month(tot_population_CAR$Date) %>% as.factor
+tot_population_CAR <- tot_population_CAR %>% select(Country, Year, Month, Population)
+tot_population_CAR %>% arrange(Year, Month) %>% filter(!is.na(Population))
+
 IPC_CAR %>% group_by(Year, Month) %>% summarize(n_subareas=Subarea %>% unique %>% length)
 
 IPC_CAR_national_populations <- IPC_CAR %>%
