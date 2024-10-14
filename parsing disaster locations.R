@@ -47,21 +47,25 @@ for (i in 1:nrow(disaster_Afg)) {
                                                                        gregexpr("\\)", x)[[1]][1] - 1),
                                                                 x))
   locations_split <- strsplit(locations_split, "\\b, \\b|\\b and \\b")
-  ArcGIS_coords <- geo(address=paste0(locations_split, ", Afghanistan"),
-                       method = "arcgis", 
-                       unique_only = T)
-  ArcGIS_rev_geocode <- reverse_geocode(ArcGIS_coords,
-                                        lat = lat, 
-                                        long = long, 
-                                        address = addr,
-                                        method = "arcgis",
-                                        full_results = T) %>% 
-    mutate(DisNo._i=DisNo._i) %>% relocate(DisNo._i, address)
-  disaster_Afg_separate_locations <- rbind(disaster_Afg_separate_locations, ArcGIS_rev_geocode)
+  for (location in locations_split) {
+    ArcGIS_coords <- geo(address=paste0(location, ", Afghanistan"),
+                         method = "arcgis", 
+                         unique_only = T)
+    ArcGIS_rev_geocode <- reverse_geocode(ArcGIS_coords,
+                                          lat = lat, 
+                                          long = long, 
+                                          address = addr,
+                                          method = "arcgis",
+                                          full_results = T) %>% 
+      mutate(DisNo._i=DisNo._i) %>% relocate(DisNo._i, address)
+    disaster_Afg_separate_locations <- rbind(disaster_Afg_separate_locations, ArcGIS_rev_geocode)
+  }
   if (i %% 10 == 0) print(paste0(i, "th row complete"))
 }
 end.t <- Sys.time()
-end.t - start.t # 14.13823 mins
+end.t - start.t # 15.16602 mins
 disaster_Afg_separate_locations
 disaster_Afg_separate_locations %>% view
 # disaster_Afg_separate_locations %>% write.csv("Food Security/Disaster Afghanistan locations.csv", row.names=F)
+
+disaster_Afg_separate_locations %>% filter(CountryCode != "AFG") %>% select(address, addr) %>% as.data.frame
