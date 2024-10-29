@@ -33,36 +33,68 @@ IPC_AS$Date <- as.Date(paste(IPC_AS$Date, "01"), format="%b %Y %d")
 IPC_AS$Year <- year(IPC_AS$Date) %>% as.factor
 IPC_AS$Month <- month(IPC_AS$Date) %>% as.factor
 IPC_AS <- IPC_AS %>% relocate(Country:Area_id, Year, Month)
+IPC_AS$Subarea <- gsub(" c_[0-9]+$", "", IPC_AS$Subarea)
+IPC_AS$Subarea <- gsub("_[0-9,A-z]+$", "", IPC_AS$Subarea)
 
-# IPC_Afg <- IPC_AS %>% filter(Country == "Afghanistan") # 549
+IPC_Afg <- IPC_AS %>% filter(Country == "Afghanistan") # 549
 FSI_Afg <- FSI %>% filter(Country == "Afghanistan")
 disaster_Afg <- disaster %>% filter(Country == "Afghanistan") # 214
 disaster_Afg_separate_locations <- read.csv("Food Security/Disaster Afghanistan locations.csv") %>% as_tibble
+
+disaster_Afg <- disaster_Afg_separate_locations %>%
+  select(DisNo., lat, long, Subregion, Region) %>% 
+  left_join(disaster_Afg %>%
+              select(-Region, -Subregion) %>% 
+              rename(event_lat=Latitude, event_long=Longitude), by="DisNo.")
 conflict_Afg <- conflict_ME %>% filter(country == "Afghanistan") # 66,500 # much more than CAR
 conflict_Afg$event_date <- as.Date(conflict_Afg$event_date, format="%d %B %Y")
 conflict_Afg$month <- month(conflict_Afg$event_date) %>% as.factor
 conflict_Afg <- conflict_Afg %>% relocate(event_id_cnty, event_date, year, month)
 }
 
+#### NEED aggregate phase populations in 05-2017 and 01-2018
 FSI_Afg
 IPC_Afg
-IPC_Afg$over_phase_3 <- IPC_Afg %>% select(Phase_3_ratio, Phase_4_ratio, Phase_5_ratio) %>% apply(1, sum)
 conflict_Afg_n_events <- conflict_Afg %>% 
   group_by(year, admin1) %>% 
   summarise(n_events=n())
 
-conflict_Afg %>% 
-  group_by(year, admin1, event_type) %>% 
-  summarise(n_events=n())
+disaster_Afg_monthly_events <- disaster_Afg %>% 
+  group_by(Region, `Start Year`, `Start Month`) %>% 
+  summarise(n_events=n()) %>% 
+  rename(year=`Start Year`, month=`Start Month`)
 
+disaster_Afg_annual_events <- disaster_Afg %>% 
+  group_by(Region, `Start Year`) %>% 
+  summarise(n_events=n()) %>% 
+  rename(year=`Start Year`)
+
+conflict_Afg$event_type %>% table
+disaster_Afg$`Disaster Type` %>% table
+
+year_prev <- 0
 IPC_Afg_year_month <- IPC_Afg %>% select(Year, Month) %>% filter(Year != "2024") %>% arrange(Year, Month) %>% unique 
 for (i in 1:nrow(IPC_Afg_year_month)) {
   year_i <- IPC_Afg_year_month$Year[i] %>% as.character %>% as.numeric
   month_i <- IPC_Afg_year_month$Month[i] %>% as.character %>% as.numeric
   
-  ICP_map_i <- afg_map %>% left_join(IPC_Afg %>% filter(Year == year_i & Month == month_i) %>% select(Subarea, over_phase_3) %>% rename(shapeName=Subarea),
+  ICP_map_i <- afg_map %>% left_join(IPC_Afg %>% filter(Year == year_i & Month == month_i) %>% select(Subarea, Phase_3above_ratio) %>% rename(shapeName=Subarea),
                         by="shapeName") %>% 
-    ggplot() + geom_sf(aes(fill=over_phase_3)) +
+    ggplot() + geom_sf(aes(fill=Phase_3above_ratio)) +
+    scale_fill_viridis_c(limits=c(0,1)) +
+    theme_bw() +
+    theme(panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          panel.border = element_blank(),
+          axis.text = element_blank(),
+          line = element_blank())
+  # ggsave(paste0("Food Security/Figs/AFG IPC ", year_i, " ", month_i, ".png"), ICP_map_i, scale=1)
+  
+  if (year_i == year_prev) next
+  conflict_map_i <- afg_map %>% left_join(conflict_Afg_n_events %>% filter(year == year_i) %>% rename(shapeName=admin1),
+                        by="shapeName") %>% 
+    ggplot() + geom_sf(aes(fill=n_events)) +
+    scale_fill_viridis_c(limits=c(0,1500)) +
     theme_bw() +
     theme(panel.grid.major = element_blank(),
           panel.grid.minor = element_blank(),
@@ -70,16 +102,18 @@ for (i in 1:nrow(IPC_Afg_year_month)) {
           axis.text = element_blank(),
           line = element_blank())
   
-  conflict_map_i <- afg_map %>% left_join(conflict_Afg_n_events %>% filter(year == year_i) %>% rename(shapeName=admin1),
-                        by="shapeName") %>% 
+  disaster_map_i <- afg_map %>% left_join(disaster_Afg_annual_events %>% filter(year == year_i) %>% rename(shapeName=Region),
+                                          by="shapeName") %>% 
     ggplot() + geom_sf(aes(fill=n_events)) +
+    scale_fill_viridis_c(limits=c(0,17)) +
     theme_bw() +
     theme(panel.grid.major = element_blank(),
           panel.grid.minor = element_blank(),
           panel.border = element_blank(),
           axis.text = element_blank(),
           line = element_blank())
-  ggsave(paste0("Food Security/Figs/AFG IPC ", year_i, " ", month_i, ".png"), ICP_map_i, scale=1)
-  ggsave(paste0("Food Security/Figs/AFG n_conflicts ", year_i, ".png"), conflict_map_i, scale=1)
+  year_prev <- year_i
+  # ggsave(paste0("Food Security/Figs/AFG n_conflicts ", year_i, ".png"), conflict_map_i, scale=1)
+  # ggsave(paste0("Food Security/Figs/AFG n_disasters ", year_i, " ", ".png"), disaster_map_i, scale=1)
 }
 
