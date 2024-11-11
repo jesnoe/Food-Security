@@ -224,7 +224,6 @@ disaster_Afg_ts <- disaster_Afg_monthly_events %>%
 names(disaster_Afg_ts)
 
 year_month <- disaster_Afg_ts$year_month
-IPC_plot <- ggplot(aes(x=1:12))
 conflict_types <- conflicts_Afg_ts$conflict %>% unique
 conflict_plots <- list()
 for (i in 1:6) {
@@ -310,7 +309,7 @@ for (i in 15:9) {
 
 lagged4_IPC <- IPC_Afg_provinces[,15:(15-4)]
 names(lagged4_IPC) <- c(paste0("V", 1:5))
-for (i in 14:9) {
+for (i in 14:9) { #238 rows
   data_i <- IPC_Afg_provinces[,i:(i-4)] %>% as.matrix
   colnames(data_i) <- NULL
   lagged4_IPC <- bind_rows(lagged4_IPC, data_i %>% as_tibble)
