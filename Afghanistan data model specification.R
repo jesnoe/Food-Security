@@ -10,6 +10,7 @@ library(lubridate)
 library(fpp2)
 library(sf)
 library(sp)
+library(reshape2)
 
 {
 afg_map <- read_sf("Food Security/geoBoundaries-AFG-ADM1.geojson")
@@ -359,6 +360,18 @@ for (i in 1:9) {
 lagged_reg_data[is.na(lagged_reg_data)] <- 0
 lagged_reg_data %>% apply(2, function(x) table(x) %>% length) %>% sort
 lagged_reg_data %>% str
+
+lagged_reg_data_corr <- cor(lagged_reg_data) %>% melt
+lagged_reg_data_corr %>%
+  ggplot(aes(x=Var1, y=Var2, fill=value)) + 
+  geom_tile() +
+  scale_fill_gradientn(colors = c("blue","skyblue","grey40", "yellow","red"),
+                       values = scales::rescale(c(-1, -.Machine$double.eps, 0 , .Machine$double.eps, 1)),
+                       limits=c(-1, 1)) +
+  labs(title="Correlations of AFG data") + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+
 lm(`Phase_3+ratio_t`~., data=lagged_reg_data) %>% summary()
 lm(c_n_events_Riots_t~., data=lagged_reg_data) %>% summary()
 lm(c_n_events_Violence_against_civilians_t~., data=lagged_reg_data) %>% summary()
