@@ -371,7 +371,8 @@ lagged_reg_data_corr %>%
   labs(title="Correlations of AFG data") + 
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 
-
+lm1_stepwise <- MASS::stepAIC(lm(`Phase_3+ratio_t`~., data=lagged_reg_data), trace=F, direction="both")
+lm1_forward %>% summary
 lm(`Phase_3+ratio_t`~., data=lagged_reg_data) %>% summary()
 lm(c_n_events_Riots_t~., data=lagged_reg_data) %>% summary()
 lm(c_n_events_Violence_against_civilians_t~., data=lagged_reg_data) %>% summary()
