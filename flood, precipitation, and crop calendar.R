@@ -60,46 +60,47 @@ crop_soybean <- read.csv("Food Security/crop calendar - soybean.csv") %>% as_tib
 crop_wheat <- read.csv("Food Security/crop calendar - wheat.csv") %>% as_tibble
 }
 
-disaster_AFG_type <- disaster_Afg %>% filter(year > 2016) %>%  group_by(year, month, `Disaster Type`) %>% summarize(n_event=n(), n_affected=`Total Affected`[1])
+disaster_AFG_type <- disaster_Afg %>%
+  filter(year > 2016) %>% 
+  group_by(year, month, `Disaster Type`) %>%
+  summarize(n_event=n(), n_affected=`Total Affected`[1]) %>% 
+  mutate(date = as.Date(paste(year, month, "01", sep="-"), format="%Y-%m-%d"))
 disaster_AFG_type %>% ggplot() +
-  geom_line(aes(x=paste(year, "_", month),
+  geom_line(aes(x=date,
                 y=n_event,
                 group=`Disaster Type`,
                 color=`Disaster Type`)) +
-  geom_point(aes(x=paste(year, "_", month),
+  geom_point(aes(x=date,
                  y=n_event,
                  group=`Disaster Type`,
                  color=`Disaster Type`)) +
   scale_color_viridis_d(option="F") +
-  labs(x="year_month", y="n_disasters", title="AFG n_disasters") + 
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  labs(x="Year", y="n_disasters", title="AFG n_disasters")
 
 disaster_AFG_type %>% ggplot() +
-  geom_line(aes(x=paste(year, "_", month),
+  geom_line(aes(x=date,
                 y=n_affected,
                 group=`Disaster Type`,
                 color=`Disaster Type`)) +
-  geom_point(aes(x=paste(year, "_", month),
+  geom_point(aes(x=date,
                  y=n_affected,
                  group=`Disaster Type`,
                  color=`Disaster Type`)) +
   scale_color_viridis_d(option="F") +
-  labs(x="year_month", y="n_affected", title="AFG n_affected") + 
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  labs(x="Year", y="n_affected", title="AFG n_affected")
 
 disaster_AFG_type %>% filter(`Disaster Type` != "Drought") %>% 
   ggplot() +
-  geom_line(aes(x=paste(year, "_", month),
+  geom_line(aes(x=date,
                 y=n_affected,
                 group=`Disaster Type`,
                 color=`Disaster Type`)) +
-  geom_point(aes(x=paste(year, "_", month),
+  geom_point(aes(x=date,
                  y=n_affected,
                  group=`Disaster Type`,
                  color=`Disaster Type`)) +
   scale_color_viridis_d(option="F") +
-  labs(x="year_month", y="n_affected", title="AFG n_affected") + 
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  labs(x="Year", y="n_affected", title="AFG n_affected")
 
 disaster_Afg %>% filter(year < 2016 & `Disaster Type` == "Drought") %>% view
 
