@@ -97,9 +97,9 @@ afg_map$shapeName %>% sort
 IPC_Afg %>% filter(!(Area %in% afg_map$shapeName)) %>% pull(Area) %>% unique
 IPC_Afg %>% filter(!(Subarea %in% afg_map$shapeName)) %>% pull(Subarea) %>% unique %>% sort
 
+
 IPC_Afg <- IPC_Afg %>% 
   mutate(Area = ifelse(is.na(Area) & Subarea %in% afg_map$shapeName, Subarea, Area))
-
 IPC_Afg_provinces <- IPC_Afg %>%
   group_by(Area, Year, Month) %>% 
   summarise(across(c(Phase_1, Phase_2, Phase_3, Phase_4, Phase_5, Phase_3above), sum)) %>% 
@@ -109,6 +109,7 @@ IPC_Afg_provinces <- IPC_Afg %>%
          Phase_4_ratio = Phase_4/sum(Phase_1, Phase_2, Phase_3, Phase_4, Phase_5, na.rm = T),
          Phase_5_ratio = Phase_5/sum(Phase_1, Phase_2, Phase_3, Phase_4, Phase_5, na.rm = T),
          Phase_3above_ratio = Phase_3above/sum(Phase_1, Phase_2, Phase_3, Phase_4, Phase_5, na.rm = T))
+
 IPC_Afg_provinces <- IPC_Afg_provinces %>% select(Area, Year, Month, Phase_3above_ratio) %>% 
   pivot_wider(id_cols=Area, names_prefix="Phase_3+ratio_", names_from = c("Year", "Month"), values_from = Phase_3above_ratio) %>% 
   relocate(Area, `Phase_3+ratio_2017_5`, `Phase_3+ratio_2017_9`)
@@ -121,7 +122,7 @@ conflict_Afg$sub_event_type %>% table # 24 types
 conflict_Afg %>% filter(event_type == "Protests") %>% pull(sub_event_type) %>% table
 conflict_Afg %>% filter(event_type == "Strategic developments") %>% pull(sub_event_type) %>% table
 conflict_Afg %>% filter(event_type == "Violence against civilians") %>% pull(sub_event_type) %>% table
-
+  
 conflict_Afg_aggr <- conflict_Afg %>% 
   filter(!(year == 2024 & month > 3)) %>% 
   filter(!(year == 2017 & month < 3)) %>% 
@@ -165,7 +166,8 @@ disaster_Afg_monthly_aggr <- disaster_Afg %>%
   filter(!(year == 2017 & month < 3)) %>% 
   group_by(Region, year, month) %>% 
   summarise(n_disasters=n(),
-            affected=sum(`Total Affected`, na.rm=T)) %>% 
+            affected=sum(`Total Affected`, na.rm=T),
+            deaths=sum(`Total Deaths`, na.rm=T)) %>% 
   rename(Area=Region) %>% 
   mutate(year_month=as.Date(paste(month, year, "01"), format="%m %Y %d")) %>% 
   arrange(year, month)
@@ -195,104 +197,12 @@ disaster_Afg_monthly_affected <- disaster_Afg_monthly_aggr %>%
   pivot_wider(id_cols=Area, names_prefix = "affected_", names_from = c(year, month), values_from = log_affected)
 disaster_Afg_monthly_affected[is.na(disaster_Afg_monthly_affected)] <- 0
 
-# time series plot
-IPC_Afg_ts <- IPC_Afg_provinces %>% 
-  pivot_longer(cols=-Area, names_to = "year_month", values_to = "Phase_3_or_high") %>% 
-  mutate(year_month=gsub("Phase_3\\+ratio_", "", year_month) %>% as.factor)
-
-IPC_Afg_ts_plot <- IPC_Afg_ts %>% ggplot() +
-  geom_line(aes(x=year_month,
-                y=Phase_3_or_high,
-                group=Area,
-                color=Area)) +
-  geom_point(aes(x=year_month,
-                 y=Phase_3_or_high,
-                 group=Area,
-                 color=Area)) +
-  scale_color_viridis_d(option="H") +
-  labs(x="year_month", y="ratio of Phase_3_or_high")
-# ggsave(paste0("Food Security/Figs/ts plot/AFG food insecurity ts.png"), IPC_Afg_ts_plot, width=25, height=12, unit="cm")
-
-conflicts_Afg_ts <- conflict_Afg_n_events %>% 
-  pivot_longer(cols=-Area, names_sep="_", names_to = c("conflict", "year", "month"), values_to = "n_conflicts") %>% 
-  mutate(year_month=paste(year, month, sep="_") %>% as.factor,
-         conflict = conflict %>% as.factor) %>% 
-  select(-year, -month) %>% relocate(year_month)
-
-disaster_Afg_ts <- disaster_Afg_monthly_events %>% 
-  pivot_longer(cols=-Area, names_to = "year_month", values_to = "n_disasters") %>% 
-  mutate(year_month=gsub("n_disasters_", "", year_month) %>% as.factor)
-names(disaster_Afg_ts)
-
-year_month <- disaster_Afg_ts$year_month
-conflict_types <- conflicts_Afg_ts$conflict %>% unique
-conflict_plots <- list()
-for (i in 1:6) {
-  conflict_type <- conflict_types[i]
-  conflicts_Afg_ts_i <- conflicts_Afg_ts %>%
-    filter(conflict == conflict_type)
-  conflict_plot_i <- conflicts_Afg_ts_i %>% 
-    ggplot() +
-    geom_line(aes(x=year_month,
-                  y=n_conflicts,
-                  group=Area,
-                  color=Area)) +
-    scale_color_viridis_d(option="H") +
-    labs(x="year_month", y="# of conflict events")
-  conflict_plots[[as.character(conflict_type)]] <- conflict_plot_i
-  conflict_type <- gsub("/", "-", conflict_type)
-  # ggsave(paste0("Food Security/Figs/ts plot/AFG n_conflicts ", conflict_type, ".png"), conflict_plot_i, width=25, height=12, unit="cm")
-}
-conflict_plots$`Explosions/Remote violence`
-affected
-
-disaster_plot <- disaster_Afg_ts %>% ggplot() +
-  geom_line(aes(x=year_month,
-                y=n_disasters,
-                group=Area,
-                color=Area)) +
-  scale_color_viridis_d(option="H") +
-  labs(x="year_month", y="# of disaster events")
-# ggsave(paste0("Food Security/Figs/ts plot/AFG n_disasters.png"), disaster_plot, width=25, height=12, unit="cm")
-
-
-conflicts_Afg_fatalities_ts <- conflict_Afg_fatalities %>% 
-  pivot_longer(cols=-Area, names_sep="_", names_to = c("conflict", "year", "month"), values_to = "log_fatalities") %>% 
-  mutate(year_month=paste(year, month, sep="_") %>% as.factor,
-         conflict = conflict %>% as.factor) %>% 
-  select(-year, -month) %>% relocate(year_month)
-
-disaster_Afg_affected_ts <- disaster_Afg_monthly_affected %>% 
-  pivot_longer(cols=-Area, names_to = "year_month", values_to = "log_affected") %>% 
-  mutate(year_month=gsub("affected_", "", year_month) %>% as.factor)
-
-year_month <- disaster_Afg_ts$year_month
-conflict_types <- conflicts_Afg_ts$conflict %>% unique
-for (i in 1:6) {
-  conflict_type <- conflict_types[i]
-  conflicts_Afg_ts_i <- conflicts_Afg_fatalities_ts %>%
-    filter(conflict == conflict_type)
-  conflict_plot_i <- conflicts_Afg_ts_i %>% 
-    ggplot() +
-    geom_line(aes(x=year_month,
-                  y=log_fatalities,
-                  group=Area,
-                  color=Area)) +
-    scale_color_viridis_d(option="H") +
-    labs(x="year_month", y="log conflict fatalities")
-  conflict_type <- gsub("/", "-", conflict_type)
-  ggsave(paste0("Food Security/Figs/ts plot/AFG log fatalities ", conflict_type, ".png"), conflict_plot_i, width=25, height=12, unit="cm")
-}
-
-disaster_affected_plot <- disaster_Afg_affected_ts %>% ggplot() +
-  geom_line(aes(x=year_month,
-                y=log_affected,
-                group=Area,
-                color=Area)) +
-  scale_color_viridis_d(option="H") +
-  labs(x="year_month", y="log disaster casualties")
-# ggsave(paste0("Food Security/Figs/ts plot/AFG log affected.png"), disaster_affected_plot, width=25, height=12, unit="cm")
-
+disaster_Afg_monthly_deaths <- disaster_Afg_monthly_aggr %>%
+  select(-year_month) %>% 
+  group_by(year, month, Area) %>% 
+  summarise(log_deaths=log(1+sum(deaths, na.rm=T))) %>% 
+  pivot_wider(id_cols=Area, names_prefix = "log_deaths_", names_from = c(year, month), values_from = log_deaths)
+disaster_Afg_monthly_deaths[is.na(disaster_Afg_monthly_deaths)] <- 0
 
 
 # regression
@@ -308,15 +218,46 @@ for (i in 15:9) {
   print(summary(autoregression_i))
 }
 
+
+AFG_wheat_barley <- 5:7
+AFG_corn_rice <- 8:10
+
+time_since_harvest <- function(month., crop, country_harvest_season) {
+  if (crop == "wheat_barley") {
+    result <- ifelse(month. > country_harvest_season$wheat_barley[3], month. - country_harvest_season$wheat_barley[3],
+                     ifelse(month. < country_harvest_season$wheat_barley[1], month. + 12 - country_harvest_season$wheat_barley[3], 0))
+  }
+  if (crop == "corn_rice") {
+    result <- ifelse(month. > country_harvest_season$corn_rice[3], month. - country_harvest_season$corn_rice[3],
+                     ifelse(month. < country_harvest_season$corn_rice[1], month. + 12 - country_harvest_season$corn_rice[3], 0))
+  }
+  return(result)
+}
+AFG_harvest <- list(wheat_barley=AFG_wheat_barley,
+                    corn_rice=AFG_corn_rice)
 lagged4_IPC <- IPC_Afg_provinces[,15:(15-4)]
-names(lagged4_IPC) <- c(paste0("V", 1:5))
+lagged4_IPC <- cbind(lagged4_IPC,
+                     month=IPC_Afg_year_month$Month[14],
+                     wheat_barley=time_since_harvest(IPC_Afg_year_month$Month[14], "wheat_barley", AFG_harvest),
+                     corn_rice=time_since_harvest(IPC_Afg_year_month$Month[14], "corn_rice", AFG_harvest))
+names(lagged4_IPC) <- c(paste0("V", 1:8))
 for (i in 14:9) { #238 rows
   data_i <- IPC_Afg_provinces[,i:(i-4)] %>% as.matrix
+  data_i <- cbind(data_i,
+                  month=IPC_Afg_year_month$Month[i-1],
+                  wheat_barley=time_since_harvest(IPC_Afg_year_month$Month[i-1], "wheat_barley", AFG_harvest),
+                  corn_rice=time_since_harvest(IPC_Afg_year_month$Month[i-1], "corn_rice", AFG_harvest))
   colnames(data_i) <- NULL
   lagged4_IPC <- bind_rows(lagged4_IPC, data_i %>% as_tibble)
 }
-names(lagged4_IPC) <- c("Phase3+_ratio_t", paste0("Phase3+_ratio_t_", 1:4))
+names(lagged4_IPC) <- c("Phase3+_ratio_t", paste0("Phase3+_ratio_t_", 1:4), "month", "wheat_barley", "corn_rice")
 lm(`Phase3+_ratio_t`~., data=lagged4_IPC) %>% summary()
+lm(`Phase3+_ratio_t`~.-wheat_barley, data=lagged4_IPC) %>% summary()
+lm(`Phase3+_ratio_t`~.-corn_rice, data=lagged4_IPC) %>% summary()
+lm(`Phase3+_ratio_t`~.-month, data=lagged4_IPC) %>% summary()
+lm(`Phase3+_ratio_t`~.-wheat_barley-corn_rice, data=lagged4_IPC) %>% summary()
+lm(`Phase3+_ratio_t`~.-month-corn_rice, data=lagged4_IPC) %>% summary()
+lm(`Phase3+_ratio_t`~.-wheat_barley-month, data=lagged4_IPC) %>% summary()
 
 for (i in 15:5) {
   dependent_var <- names(IPC_Afg_provinces)[i]
@@ -337,12 +278,16 @@ reg_data_i <- IPC_Afg_provinces[,c(1, IPC_ncol:(IPC_ncol-2))] %>%
   left_join(conflict_Afg_n_events[,c(1, conflict_ncol:(conflict_ncol-6*2+1))], by="Area") %>%
   left_join(conflict_Afg_fatalities[,c(1, conflict_ncol:(conflict_ncol-6*2+1))], by="Area") %>% 
   left_join(disaster_Afg_monthly_events[,c(1, disaster_ncol:(disaster_ncol-2))], by="Area") %>% 
-  left_join(disaster_Afg_monthly_affected[,c(1, disaster_ncol:(disaster_ncol-2))], by="Area")
+  left_join(disaster_Afg_monthly_affected[,c(1, disaster_ncol:(disaster_ncol-2))], by="Area") %>% 
+  left_join(disaster_Afg_monthly_deaths[,c(1, disaster_ncol:(disaster_ncol-2))], by="Area")
 names(reg_data_i) <- gsub("2024_3", "t", names(reg_data_i))
 names(reg_data_i) <- gsub("2023_10", "t_1", names(reg_data_i))
 names(reg_data_i) <- gsub("2023_4", "t_2", names(reg_data_i))
 names(reg_data_i) <- gsub("[/ ]", "_", names(reg_data_i))
 lagged_reg_data <- reg_data_i[,-1]
+lagged_reg_data$month <- IPC_Afg_year_month$Month[14]
+lagged_reg_data$wheat_barley <- time_since_harvest(IPC_Afg_year_month$Month[14], "wheat_barley", AFG_harvest)
+lagged_reg_data$corn_rice <- time_since_harvest(IPC_Afg_year_month$Month[14], "corn_rice", AFG_harvest)
 reg_data_names <- names(lagged_reg_data)
 for (i in 1:9) {
   IPC_col_index <- IPC_ncol - i
@@ -352,7 +297,11 @@ for (i in 1:9) {
     left_join(conflict_Afg_n_events[,c(1, conflict_col_index:(conflict_col_index-6*2+1))], by="Area") %>%
     left_join(conflict_Afg_fatalities[,c(1, conflict_col_index:(conflict_col_index-6*2+1))], by="Area") %>% 
     left_join(disaster_Afg_monthly_events[,c(1, disaster_col_index:(disaster_col_index-2))], by="Area") %>% 
-    left_join(disaster_Afg_monthly_affected[,c(1, disaster_col_index:(disaster_col_index-2))], by="Area")
+    left_join(disaster_Afg_monthly_affected[,c(1, disaster_col_index:(disaster_col_index-2))], by="Area") %>% 
+    left_join(disaster_Afg_monthly_deaths[,c(1, disaster_col_index:(disaster_col_index-2))], by="Area")
+  reg_data_i$month <- IPC_Afg_year_month$Month[14-i]
+  reg_data_i$wheat_barley <- time_since_harvest(IPC_Afg_year_month$Month[14-i], "wheat_barley", AFG_harvest)
+  reg_data_i$corn_rice <- time_since_harvest(IPC_Afg_year_month$Month[14-i], "corn_rice", AFG_harvest)
   reg_data_i <- as.matrix(reg_data_i[,-1])
   colnames(reg_data_i) <- reg_data_names
   lagged_reg_data <- bind_rows(lagged_reg_data, reg_data_i %>% as_tibble)
@@ -373,6 +322,8 @@ lagged_reg_data_corr %>%
 
 lm1_stepwise <- MASS::stepAIC(lm(`Phase_3+ratio_t`~., data=lagged_reg_data), trace=F, direction="both")
 lm1_forward %>% summary
+
+lagged_reg_data <- lagged_reg_data %>% select(-wheat_barley, -corn_rice)
 lm(`Phase_3+ratio_t`~., data=lagged_reg_data) %>% summary()
 lm(c_n_events_Riots_t~., data=lagged_reg_data) %>% summary()
 lm(c_n_events_Violence_against_civilians_t~., data=lagged_reg_data) %>% summary()

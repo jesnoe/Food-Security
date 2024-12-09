@@ -274,3 +274,103 @@ for (year_i in 2017:2024) {
     xlim(0, 8)
   ggsave(paste0("Food Security/Figs/harvest/AFG corn and rice", year_i, ".png"), corn_rice_plot, scale=1)
 }
+
+
+### prev plots
+# time series plot
+IPC_Afg_ts <- IPC_Afg_provinces %>% 
+  pivot_longer(cols=-Area, names_to = "year_month", values_to = "Phase_3_or_high") %>% 
+  mutate(year_month=gsub("Phase_3\\+ratio_", "", year_month) %>% as.factor)
+
+IPC_Afg_ts_plot <- IPC_Afg_ts %>% ggplot() +
+  geom_line(aes(x=year_month,
+                y=Phase_3_or_high,
+                group=Area,
+                color=Area)) +
+  geom_point(aes(x=year_month,
+                 y=Phase_3_or_high,
+                 group=Area,
+                 color=Area)) +
+  scale_color_viridis_d(option="H") +
+  labs(x="year_month", y="ratio of Phase_3_or_high")
+# ggsave(paste0("Food Security/Figs/ts plot/AFG food insecurity ts.png"), IPC_Afg_ts_plot, width=25, height=12, unit="cm")
+
+conflicts_Afg_ts <- conflict_Afg_n_events %>% 
+  pivot_longer(cols=-Area, names_sep="_", names_to = c("conflict", "year", "month"), values_to = "n_conflicts") %>% 
+  mutate(year_month=paste(year, month, sep="_") %>% as.factor,
+         conflict = conflict %>% as.factor) %>% 
+  select(-year, -month) %>% relocate(year_month)
+
+disaster_Afg_ts <- disaster_Afg_monthly_events %>% 
+  pivot_longer(cols=-Area, names_to = "year_month", values_to = "n_disasters") %>% 
+  mutate(year_month=gsub("n_disasters_", "", year_month) %>% as.factor)
+names(disaster_Afg_ts)
+
+year_month <- disaster_Afg_ts$year_month
+conflict_types <- conflicts_Afg_ts$conflict %>% unique
+conflict_plots <- list()
+for (i in 1:6) {
+  conflict_type <- conflict_types[i]
+  conflicts_Afg_ts_i <- conflicts_Afg_ts %>%
+    filter(conflict == conflict_type)
+  conflict_plot_i <- conflicts_Afg_ts_i %>% 
+    ggplot() +
+    geom_line(aes(x=year_month,
+                  y=n_conflicts,
+                  group=Area,
+                  color=Area)) +
+    scale_color_viridis_d(option="H") +
+    labs(x="year_month", y="# of conflict events")
+  conflict_plots[[as.character(conflict_type)]] <- conflict_plot_i
+  conflict_type <- gsub("/", "-", conflict_type)
+  # ggsave(paste0("Food Security/Figs/ts plot/AFG n_conflicts ", conflict_type, ".png"), conflict_plot_i, width=25, height=12, unit="cm")
+}
+conflict_plots$`Explosions/Remote violence`
+affected
+
+disaster_plot <- disaster_Afg_ts %>% ggplot() +
+  geom_line(aes(x=year_month,
+                y=n_disasters,
+                group=Area,
+                color=Area)) +
+  scale_color_viridis_d(option="H") +
+  labs(x="year_month", y="# of disaster events")
+# ggsave(paste0("Food Security/Figs/ts plot/AFG n_disasters.png"), disaster_plot, width=25, height=12, unit="cm")
+
+
+conflicts_Afg_fatalities_ts <- conflict_Afg_fatalities %>% 
+  pivot_longer(cols=-Area, names_sep="_", names_to = c("conflict", "year", "month"), values_to = "log_fatalities") %>% 
+  mutate(year_month=paste(year, month, sep="_") %>% as.factor,
+         conflict = conflict %>% as.factor) %>% 
+  select(-year, -month) %>% relocate(year_month)
+
+disaster_Afg_affected_ts <- disaster_Afg_monthly_affected %>% 
+  pivot_longer(cols=-Area, names_to = "year_month", values_to = "log_affected") %>% 
+  mutate(year_month=gsub("affected_", "", year_month) %>% as.factor)
+
+year_month <- disaster_Afg_ts$year_month
+conflict_types <- conflicts_Afg_ts$conflict %>% unique
+for (i in 1:6) {
+  conflict_type <- conflict_types[i]
+  conflicts_Afg_ts_i <- conflicts_Afg_fatalities_ts %>%
+    filter(conflict == conflict_type)
+  conflict_plot_i <- conflicts_Afg_ts_i %>% 
+    ggplot() +
+    geom_line(aes(x=year_month,
+                  y=log_fatalities,
+                  group=Area,
+                  color=Area)) +
+    scale_color_viridis_d(option="H") +
+    labs(x="year_month", y="log conflict fatalities")
+  conflict_type <- gsub("/", "-", conflict_type)
+  ggsave(paste0("Food Security/Figs/ts plot/AFG log fatalities ", conflict_type, ".png"), conflict_plot_i, width=25, height=12, unit="cm")
+}
+
+disaster_affected_plot <- disaster_Afg_affected_ts %>% ggplot() +
+  geom_line(aes(x=year_month,
+                y=log_affected,
+                group=Area,
+                color=Area)) +
+  scale_color_viridis_d(option="H") +
+  labs(x="year_month", y="log disaster casualties")
+# ggsave(paste0("Food Security/Figs/ts plot/AFG log affected.png"), disaster_affected_plot, width=25, height=12, unit="cm")
