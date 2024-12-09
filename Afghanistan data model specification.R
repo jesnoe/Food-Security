@@ -322,8 +322,8 @@ lagged_reg_data_corr %>%
 
 lm1_stepwise <- MASS::stepAIC(lm(`Phase_3+ratio_t`~., data=lagged_reg_data), trace=F, direction="both")
 lm1_forward %>% summary
-
-lagged_reg_data <- lagged_reg_data %>% select(-wheat_barley, -corn_rice)
+# lagged_reg_data_temp <- lagged_reg_data
+lagged_reg_data <- lagged_reg_data_temp %>% select(-month, -corn_rice)
 lm(`Phase_3+ratio_t`~., data=lagged_reg_data) %>% summary()
 lm(c_n_events_Riots_t~., data=lagged_reg_data) %>% summary()
 lm(c_n_events_Violence_against_civilians_t~., data=lagged_reg_data) %>% summary()
