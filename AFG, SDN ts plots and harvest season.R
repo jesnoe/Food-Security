@@ -1,11 +1,10 @@
 # setwd("/Users/R")
-# setwd("C:/Users/gkfrj/Documents/R")
+# setwd("C:/Users/User/Documents/R")
 library(readxl)
 library(stringi)
 library(tidyverse)
 library(tidygeocoder)
 library(gridExtra)
-library(colmaps)
 library(lubridate)
 library(fpp2)
 library(sf)
@@ -213,6 +212,7 @@ disaster_Afg_monthly_aggr <- disaster_Afg %>%
   mutate(year_month=as.Date(paste(month, year, "01"), format="%m %Y %d")) %>% 
   arrange(year, month)
 
+
 disaster_Afg_monthly_aggr %>% 
   ggplot() +
   geom_line(aes(x=year_month, y=n_disasters, group=Area, color=Area))+ 
@@ -337,6 +337,15 @@ disaster_plot <- disaster_Afg_ts %>% ggplot() +
   labs(x="year_month", y="# of disaster events")
 # ggsave(paste0("Food Security/Figs/ts plot/AFG n_disasters.png"), disaster_plot, width=25, height=12, unit="cm")
 
+disaster_AFG_type %>% 
+  filter(`Disaster Type` %in% c("Flood", "Drought")) %>% 
+  ggplot() +
+  geom_line(aes(x=date,
+                y=n_event,
+                group=`Disaster Type`,
+                color=`Disaster Type`)) +
+  # scale_color_viridis_d(option="H") +
+  labs(x="Year", y="# of disaster events")
 
 conflicts_Afg_fatalities_ts <- conflict_Afg_fatalities %>% 
   pivot_longer(cols=-Area, names_sep="_", names_to = c("conflict", "year", "month"), values_to = "log_fatalities") %>% 
