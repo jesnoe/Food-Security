@@ -11,6 +11,7 @@ library(sf)
 library(sp)
 library(reshape2)
 library(glmnet)
+library(psych)
 
 {
 afg_map <- read_sf("Food Security/geoBoundaries-AFG-ADM1.geojson")
@@ -340,6 +341,14 @@ lagged_reg_data_corr %>%
                        limits=c(-1, 1)) +
   labs(title="Correlations of AFG data") + 
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+
+## Factor Analysis
+eigen_reg_data <- eigen(cor(lagged_reg_data[,-1]))
+eigen_reg_data$values
+fa_IPC_t <- fa(lagged_reg_data[,-1], nfactors = 10, rotate = "varimax")
+fa_IPC_t$loadings
+
 
 lm1_stepwise <- MASS::stepAIC(lm(`Phase_3+ratio_t`~., data=lagged_reg_data), trace=F, direction="both")
 lm1_forward <- MASS::stepAIC(lm(`Phase_3+ratio_t`~., data=lagged_reg_data), trace=F, direction="forward")
