@@ -352,6 +352,25 @@ IPC_t_lasso <- glmnet(lagged_reg_data %>% select(-`Phase_3+ratio_t`),
                       lambda=0.002203,
                       alpha=1)
 IPC_t_lasso$beta
+
+y <- lagged_reg_data$`Phase_3+ratio_t`
+x <- lagged_reg_data %>% select(-`Phase_3+ratio_t`) %>% as.matrix
+y_pred <- predict(IPC_t_lasso, newx = x, s = 0.002203)
+
+# Residual Sum of Squares (RSS)
+rss <- sum((y - y_pred)^2)
+
+# Total Sum of Squares (TSS)
+tss <- sum((y - mean(y))^2)
+
+# Number of observations and predictors
+n <- nrow(x)
+k <- length(coef(IPC_t_lasso, s = 0.002203)) - 1 # Subtract 1 for the intercept
+
+# Adjusted R^2
+r2_adj <- 1 - ((rss / (n - k - 1)) / (tss / (n - 1)))
+r2_adj
+
 glmnet(`Phase_3+ratio_t`~.-month_diff, data=lagged_reg_data) %>% summary()
 lm(c_n_events_Riots_t~., data=lagged_reg_data) %>% summary()
 lm(c_n_events_Riots_t~.-month_diff, data=lagged_reg_data) %>% summary()

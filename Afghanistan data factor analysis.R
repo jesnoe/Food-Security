@@ -299,16 +299,16 @@ fa_IPC_t <- fa(lagged_reg_data[,-1], nfactors = 10, rotate = "varimax")
 fa_IPC_t$loadings
 
 conflict_reg_data <- lagged_reg_data %>% select(c_n_events_Riots_t:log_fatal_Battles_t_1)
-eigen_conflict <- eigen(cor(conflict_reg_data))
+eigen_conflict <- eigen(cor(conflict_reg_data %>% select(c_n_events_Riots_t:c_n_events_Battles_t)))
 eigen_conflict$values
-fa_conflict <- fa(conflict_reg_data, nfactors = 6, rotate = "varimax")
-fa_conflict$loadings
+fa_conflict_t <- fa(conflict_reg_data %>% select(c_n_events_Riots_t:c_n_events_Battles_t), nfactors = 3, rotate = "varimax")
+fa_conflict_t$loadings[1:6,]
 
 disaster_reg_data <- lagged_reg_data %>% select(n_disasters_t:log_deaths_t_2)
-eigen_disaster <- eigen(cor(disaster_reg_data))
+eigen_disaster <- eigen(cor(disaster_reg_data %>% select(n_disasters_t, affected_t, log_deaths_t)))
 eigen_disaster$values
-fa_disaster <- fa(disaster_reg_data, nfactors = 3, rotate = "varimax")
-fa_disaster$loadings
+fa_disaster_t <- fa(disaster_reg_data %>% select(n_disasters_t, affected_t, log_deaths_t), nfactors = 1, rotate = "varimax")
+fa_disaster_t$loadings
 
 conflict_disaster_reg_data <- lagged_reg_data %>% select(c_n_events_Riots_t:log_deaths_t_2)
 eigen_conflict_disaster <- eigen(cor(conflict_disaster_reg_data))
@@ -318,10 +318,13 @@ fa_conflict_disaster$loadings
 fa_conflict_disaster$scores
 
 # Factor regression
-conflict_factor_scores <- fa_conflict$scores
-colnames(conflict_factor_scores) <- paste0("conflict_", colnames(conflict_factor_scores))
-disaster_factor_scores <- fa_disaster$scores
-colnames(disaster_factor_scores) <- paste0("disaster_", colnames(disaster_factor_scores))
+conflict_factor_scores <- cbind(conflict_reg_data %>% select(c_n_events_Riots_t:c_n_events_Battles_t) %>% as.matrix %*% fa_conflict_t$loadings[1:6,],
+                                conflict_reg_data %>% select(c_n_events_Violence_against_civilians_t_1:c_n_events_Battles_t_1) %>% as.matrix %*% fa_conflict_t$loadings[1:6,])
+colnames(conflict_factor_scores) <- c(paste0("conflict_factor_", 1:3, "_t"), paste0("conflict_factor_", 1:3, "_t_1"))
+disaster_factor_scores <- cbind(disaster_reg_data %>% select(n_disasters_t, affected_t, log_deaths_t) %>% as.matrix %*% fa_disaster$loadings,
+                                disaster_reg_data %>% select(n_disasters_t_1, affected_t_1, log_deaths_t_1) %>% as.matrix %*% fa_disaster$loadings,
+                                disaster_reg_data %>% select(n_disasters_t_2, affected_t_2, log_deaths_t_2) %>% as.matrix %*% fa_disaster$loadings)
+colnames(disaster_factor_scores) <- paste0("disaster_factor_t", c("", "_1", "_2"))
 
 conflict_disaster_factors_separate <- lagged_reg_data %>%
   select(`Phase_3+ratio_t`:`Phase_3+ratio_t_2`, month_diff, wheat_barley) %>%
