@@ -16,6 +16,7 @@ library(psych)
 {
   afg_map <- read_sf("Food Security/geoBoundaries-AFG-ADM1.geojson")
   afg_map$shapeName[which(afg_map$shapeName == "Ghanzi")] <- "Ghazni"
+  afg_map$shapeName[which(afg_map$shapeName == "Sar-e Pol")] <- "Sar_e_Pol"
   disaster <- read_xlsx("Food Security/public_emdat_2024-09-17.xlsx")
   FSI <- read_xlsx("Food Security/fsi-2017.xlsx")[,1:16] %>% mutate(Year = year(Year))
   for (i in 2018:2023) {
@@ -48,8 +49,7 @@ library(psych)
     mutate(across(Area:Subarea, function(x) gsub("Nimroz", "Nimruz", x))) %>% 
     mutate(across(Area:Subarea, function(x) gsub("Paktya", "Paktia", x))) %>% 
     mutate(across(Area:Subarea, function(x) gsub("Panjsher", "Panjshir", x))) %>% 
-    mutate(across(Area:Subarea, function(x) gsub("Sari pul", "Sar-e Pol", x))) %>%
-    mutate(across(Area:Subarea, function(x) gsub("Sar-e Pol", "Sar_e_Pol", x))) %>% 
+    mutate(across(Area:Subarea, function(x) gsub("Sari pul", "Sar_e_Pol", x))) %>%
     mutate(across(Area:Subarea, function(x) gsub(" Urban", "", x)))
   FSI_Afg <- FSI %>% filter(Country == "Afghanistan")
   disaster_Afg <- disaster %>% filter(Country == "Afghanistan") %>% # 214
@@ -319,11 +319,16 @@ fa_conflict_disaster$scores
 
 # Factor regression
 conflict_factor_scores <- cbind(conflict_reg_data %>% select(c_n_events_Riots_t:c_n_events_Battles_t) %>% as.matrix %*% fa_conflict_t$loadings[1:6,],
-                                conflict_reg_data %>% select(c_n_events_Violence_against_civilians_t_1:c_n_events_Battles_t_1) %>% as.matrix %*% fa_conflict_t$loadings[1:6,])
+                                conflict_reg_data %>% select(c_n_events_Riots_t_1,
+                                                             c_n_events_Explosions_Remote_violence_t_1,
+                                                             c_n_events_Violence_against_civilians_t_1,
+                                                             c_n_events_Strategic_developments_t_1,
+                                                             c_n_events_Protests_t_1,
+                                                             c_n_events_Battles_t_1) %>% as.matrix %*% fa_conflict_t$loadings[1:6,])
 colnames(conflict_factor_scores) <- c(paste0("conflict_factor_", 1:3, "_t"), paste0("conflict_factor_", 1:3, "_t_1"))
-disaster_factor_scores <- cbind(disaster_reg_data %>% select(n_disasters_t, affected_t, log_deaths_t) %>% as.matrix %*% fa_disaster$loadings,
-                                disaster_reg_data %>% select(n_disasters_t_1, affected_t_1, log_deaths_t_1) %>% as.matrix %*% fa_disaster$loadings,
-                                disaster_reg_data %>% select(n_disasters_t_2, affected_t_2, log_deaths_t_2) %>% as.matrix %*% fa_disaster$loadings)
+disaster_factor_scores <- cbind(disaster_reg_data %>% select(n_disasters_t, affected_t, log_deaths_t) %>% as.matrix %*% fa_disaster_t$loadings,
+                                disaster_reg_data %>% select(n_disasters_t_1, affected_t_1, log_deaths_t_1) %>% as.matrix %*% fa_disaster_t$loadings,
+                                disaster_reg_data %>% select(n_disasters_t_2, affected_t_2, log_deaths_t_2) %>% as.matrix %*% fa_disaster_t$loadings)
 colnames(disaster_factor_scores) <- paste0("disaster_factor_t", c("", "_1", "_2"))
 
 conflict_disaster_factors_separate <- lagged_reg_data %>%
@@ -335,6 +340,34 @@ conflict_disaster_factors_together <- lagged_reg_data %>%
   select(`Phase_3+ratio_t`:`Phase_3+ratio_t_2`, month_diff, wheat_barley) %>%
   bind_cols(fa_conflict_disaster$scores) # %>% 
   # relocate(`Phase_3+ratio_t`:wheat_barley, MR1:MR9)
+
+factor_regression <- lm(`Phase_3+ratio_t`~., data=conflict_disaster_factors_separate) %>% summary()
+factor_regression$residuals
+year_month_reg <- gsub("Phase_3\\+ratio_", "", names(IPC_Afg_provinces)[6:15])[10:1]
+factor_reg_res <- tibble(shapeName=IPC_Afg_provinces$Area)
+for (i in 1:length(year_month_reg)) {
+  year_month_i <- year_month_reg[i]
+  k <- 34*(i-1)
+  factor_reg_res[[paste0("res_", year_month_i)]] <- factor_regression$residuals[(k+1):(k+34)]
+}
+factor_reg_res
+
+max(factor_regression$residuals); min(factor_regression$residuals)
+for (i in 1:length(year_month_reg)) {
+  year_month_i <- names(factor_reg_res)[i+1]
+  res_map_i <- afg_map %>% left_join(factor_reg_res[, c(1, 1+i)], by="shapeName") %>% 
+    rename(residual=year_month_i) %>% 
+    ggplot() + geom_sf(aes(fill=residual)) +
+    labs(title=paste0("residuals in ", year_month_reg[i])) +
+    scale_fill_viridis_c(limits=c(-0.21,0.34)) +
+    theme_bw() +
+    theme(panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          panel.border = element_blank(),
+          axis.text = element_blank(),
+          line = element_blank())
+  ggsave(paste0("Food Security/Figs/regression residuals/AFG factor regression residuals ", year_month_reg[i], ".png"), res_map_i, scale=1)
+}
 
 lm(`Phase_3+ratio_t`~., data=lagged_reg_data) %>% summary()
 lm(`Phase_3+ratio_t`~., data=conflict_disaster_factors_separate) %>% summary()
@@ -446,7 +479,6 @@ for (i in 1:9) {
 }
 lagged_reg_data_flood_drought[is.na(lagged_reg_data_flood_drought)] <- 0
 lagged_reg_data_flood_drought
-
 
 # -month_diff
 lm(`Phase_3+ratio_t`~., data=lagged_reg_data_flood_drought) %>% summary()
