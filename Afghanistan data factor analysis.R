@@ -94,7 +94,7 @@ library(psych)
 
 IPC_Afg <- IPC_Afg %>% 
   mutate(Area = ifelse(is.na(Area) & Subarea %in% afg_map$shapeName, Subarea, Area))
-IPC_Afg_provinces <- IPC_Afg %>%
+IPC_Afg_provinces_long <- IPC_Afg %>%
   group_by(Area, Year, Month) %>% 
   summarise(across(c(Phase_1, Phase_2, Phase_3, Phase_4, Phase_5, Phase_3above), sum)) %>% 
   mutate(Phase_1_ratio = Phase_1/sum(Phase_1, Phase_2, Phase_3, Phase_4, Phase_5, na.rm = T),
@@ -104,7 +104,7 @@ IPC_Afg_provinces <- IPC_Afg %>%
          Phase_5_ratio = Phase_5/sum(Phase_1, Phase_2, Phase_3, Phase_4, Phase_5, na.rm = T),
          Phase_3above_ratio = Phase_3above/sum(Phase_1, Phase_2, Phase_3, Phase_4, Phase_5, na.rm = T))
 
-IPC_Afg_provinces <- IPC_Afg_provinces %>% select(Area, Year, Month, Phase_3above_ratio) %>% 
+IPC_Afg_provinces <- IPC_Afg_provinces_long %>% select(Area, Year, Month, Phase_3above_ratio) %>% 
   pivot_wider(id_cols=Area, names_prefix="Phase_3+ratio_", names_from = c("Year", "Month"), values_from = Phase_3above_ratio) %>% 
   relocate(Area, `Phase_3+ratio_2017_5`, `Phase_3+ratio_2017_9`)
 
@@ -369,6 +369,93 @@ for (i in 1:length(year_month_reg)) {
   ggsave(paste0("Food Security/Figs/regression residuals/AFG factor regression residuals ", year_month_reg[i], ".png"), res_map_i, scale=1)
 }
 
+IPC_Afg_year_month_reg <- IPC_Afg_year_month[14:5,] %>% mutate(year_month=as.Date(paste(Year, Month, "1"), "%Y %m %d")) %>% pull(year_month)
+
+factor_lm <- lm(`Phase_3+ratio_t`~., data=conflict_disaster_factors_separate)
+factor_lm_data <- conflict_disaster_factors_separate %>%
+  select(`Phase_3+ratio_t`) %>% 
+  mutate(pred=factor_lm$fitted.values,
+         Area=rep(IPC_Afg_provinces$Area, times=10),
+         year_month=rep(IPC_Afg_year_month_reg, each=34))
+
+IPC_Afg_ts_plot <- factor_lm_data %>% ggplot() +
+  geom_line(aes(x=year_month,
+                y=`Phase_3+ratio_t`,
+                group=Area,
+                color=Area)) +
+  geom_point(aes(x=year_month,
+                 y=`Phase_3+ratio_t`,
+                 group=Area,
+                 color=Area)) +
+  scale_color_viridis_d(option="H") +
+  ylim(0, 0.8) +
+  labs(x="year_month", y="ratio of Phase_3_or_high (raw)")
+# ggsave(paste0("Food Security/Figs/ts plot/AFG food insecurity ts.png"), IPC_Afg_ts_plot, width=25, height=12, unit="cm")
+IPC_Afg_pred_ts_plot <- factor_lm_data %>% ggplot() +
+  geom_line(aes(x=year_month,
+                y=pred ,
+                group=Area,
+                color=Area)) +
+  geom_point(aes(x=year_month,
+                 y=pred ,
+                 group=Area,
+                 color=Area)) +
+  scale_color_viridis_d(option="H") +
+  ylim(0, 0.8) +
+  labs(x="year_month", y="ratio of Phase_3_or_high (pred)")
+# ggsave(paste0("Food Security/Figs/ts plot/AFG food insecurity ts (pred).png"), IPC_Afg_pred_ts_plot, width=25, height=12, unit="cm")
+
+
+# conflict type experiments
+lm(`Phase_3+ratio_t`~.,
+   data=lagged_reg_data %>%
+     select(`Phase_3+ratio_t`,
+            c_n_events_Riots_t,
+            c_n_events_Riots_t_1,
+            log_fatal_Riots_t,
+            log_fatal_Riots_t_1)) %>% summary() # 1 sig
+
+lm(`Phase_3+ratio_t`~.,
+   data=lagged_reg_data %>%
+     select(`Phase_3+ratio_t`,
+            c_n_events_Violence_against_civilians_t,
+            c_n_events_Violence_against_civilians_t_1,
+            log_fatal_Violence_against_civilians_t,
+            log_fatal_Violence_against_civilians_t_1)) %>% summary() # 0 sig
+
+lm(`Phase_3+ratio_t`~.,
+   data=lagged_reg_data %>%
+     select(`Phase_3+ratio_t`,
+            c_n_events_Strategic_developments_t,
+            c_n_events_Strategic_developments_t_1,
+            log_fatal_Strategic_developments_t,
+            log_fatal_Strategic_developments_t_1)) %>% summary() # 2 sig
+
+lm(`Phase_3+ratio_t`~.,
+   data=lagged_reg_data %>%
+     select(`Phase_3+ratio_t`,
+            c_n_events_Protests_t,
+            c_n_events_Protests_t_1,
+            log_fatal_Protests_t,
+            log_fatal_Strategic_developments_t_1)) %>% summary() # 2 sig
+
+lm(`Phase_3+ratio_t`~.,
+   data=lagged_reg_data %>%
+     select(`Phase_3+ratio_t`,
+            c_n_events_Explosions_Remote_violence_t,
+            c_n_events_Explosions_Remote_violence_t_1,
+            log_fatal_Explosions_Remote_violence_t,
+            log_fatal_Explosions_Remote_violence_t_1)) %>% summary() # 1 sig
+
+lm(`Phase_3+ratio_t`~.,
+   data=lagged_reg_data %>%
+     select(`Phase_3+ratio_t`,
+            c_n_events_Battles_t,
+            c_n_events_Battles_t_1,
+            log_fatal_Battles_t,
+            log_fatal_Battles_t_1)) %>% summary() # 1 sig
+
+lm(`Phase_3+ratio_t`~`Phase_3+ratio_t_1`, data=lagged_reg_data) %>% summary()
 lm(`Phase_3+ratio_t`~., data=lagged_reg_data) %>% summary()
 lm(`Phase_3+ratio_t`~., data=conflict_disaster_factors_separate) %>% summary()
 lm(`Phase_3+ratio_t`~., data=conflict_disaster_factors_together) %>% summary()
