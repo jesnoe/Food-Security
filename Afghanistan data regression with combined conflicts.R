@@ -116,9 +116,9 @@ conflict_Afg$event_type %>% table # 6 types
 conflict_Afg$sub_event_type %>% table # 24 types
 conflict_Afg %>% select(event_type, sub_event_type) %>% unique %>% arrange(event_type, sub_event_type) %>% print(n=24)
 
-conflict_Afg %>% filter(event_type == "Protests") %>% pull(sub_event_type) %>% table
-conflict_Afg %>% filter(event_type == "Strategic developments") %>% pull(sub_event_type) %>% table
-conflict_Afg %>% filter(event_type == "Violence against civilians") %>% pull(sub_event_type) %>% table
+conflict_Afg$event_type <- ifelse(conflict_Afg$event_type %in% c("Battles", "Explosions/Remote violence"),
+                                  "Battles_explosions",
+                                  "etc.")
 
 conflict_Afg_aggr <- conflict_Afg %>% 
   filter(!(year == 2024 & month > 3)) %>% 
@@ -245,9 +245,11 @@ disaster_affected_ncol <- ncol(disaster_Afg_monthly_affected) # 13
 names(conflict_Afg_n_events)[-1] <- paste0("c_n_events_", names(conflict_Afg_n_events)[-1])
 names(conflict_Afg_fatalities)[-1] <- paste0("log_fatal_", names(conflict_Afg_fatalities)[-1])
 reg_data_i <- IPC_Afg_provinces[,c(1, IPC_ncol:(IPC_ncol-2))] %>% 
-  left_join(conflict_Afg_n_events[,c(1, conflict_ncol:(conflict_ncol-6*2+1))], by="Area") %>%
-  left_join(conflict_Afg_fatalities[,c(1, conflict_ncol:(conflict_ncol-6*2+1))], by="Area") %>% 
+  left_join(conflict_Afg_n_events[,c(1, conflict_ncol:(conflict_ncol-2*2+1))], by="Area") %>%
+  left_join(conflict_Afg_fatalities[,c(1, conflict_ncol:(conflict_ncol-2*2+1))], by="Area") %>% 
   left_join(disaster_Afg_monthly_events[,c(1, disaster_ncol:(disaster_ncol-2))], by="Area") %>% 
+  left_join(disaster_Afg_monthly_flood[,c(1, disaster_ncol:(disaster_ncol-2))], by="Area") %>% 
+  left_join(disaster_Afg_monthly_drought[,c(1, disaster_ncol:(disaster_ncol-2))], by="Area") %>% 
   left_join(disaster_Afg_monthly_affected[,c(1, disaster_ncol:(disaster_ncol-2))], by="Area") %>%
   left_join(disaster_Afg_monthly_deaths[,c(1, disaster_ncol:(disaster_ncol-2))], by="Area")
 names(reg_data_i) <- gsub("2024_3", "t", names(reg_data_i))
@@ -262,12 +264,14 @@ lagged_reg_data$wheat_barley <- time_since_harvest(IPC_Afg_year_month$Month[14],
 reg_data_names <- names(lagged_reg_data)
 for (i in 1:9) {
   IPC_col_index <- IPC_ncol - i
-  conflict_col_index <- conflict_ncol - 6*i
+  conflict_col_index <- conflict_ncol - 2*i
   disaster_col_index <- disaster_ncol - i
   reg_data_i <- IPC_Afg_provinces[,c(1, IPC_col_index:(IPC_col_index-2))] %>% 
-    left_join(conflict_Afg_n_events[,c(1, conflict_col_index:(conflict_col_index-6*2+1))], by="Area") %>%
-    left_join(conflict_Afg_fatalities[,c(1, conflict_col_index:(conflict_col_index-6*2+1))], by="Area") %>% 
-    left_join(disaster_Afg_monthly_events[,c(1, disaster_col_index:(disaster_col_index-2))], by="Area") %>% 
+    left_join(conflict_Afg_n_events[,c(1, conflict_col_index:(conflict_col_index-2*2+1))], by="Area") %>%
+    left_join(conflict_Afg_fatalities[,c(1, conflict_col_index:(conflict_col_index-2*2+1))], by="Area") %>% 
+    left_join(disaster_Afg_monthly_events[,c(1, disaster_col_index:(disaster_col_index-2))], by="Area") %>%
+    left_join(disaster_Afg_monthly_flood[,c(1, disaster_col_index:(disaster_col_index-2))], by="Area") %>% 
+    left_join(disaster_Afg_monthly_drought[,c(1, disaster_col_index:(disaster_col_index-2))], by="Area") %>% 
     left_join(disaster_Afg_monthly_affected[,c(1, disaster_col_index:(disaster_col_index-2))], by="Area") %>% 
     left_join(disaster_Afg_monthly_deaths[,c(1, disaster_col_index:(disaster_col_index-2))], by="Area")
   reg_data_i$month_diff <- as.numeric(as.Date(paste(IPC_Afg_year_month$Year[14-i], IPC_Afg_year_month$Month[14-i], 1), format="%Y %m %d") -
@@ -457,8 +461,17 @@ lm(`Phase_3+ratio_t`~.,
             log_fatal_Battles_t,
             log_fatal_Battles_t_1)) %>% summary() # 1 sig
 
-lm(`Phase_3+ratio_t`~`Phase_3+ratio_t_1`, data=lagged_reg_data) %>% summary()
 lm(`Phase_3+ratio_t`~., data=lagged_reg_data) %>% summary()
+
+lm(`Phase_3+ratio_t`~., data=lagged_reg_data %>% select(-(n_floods_t:n_droughts_t_2))) %>% summary()
+lm(`Phase_3+ratio_t`~., data=lagged_reg_data %>% select(-(n_disasters_t:n_disasters_t_2), -(affected_t:log_deaths_t_2))) %>% summary()
+lm(`Phase_3+ratio_t`~.,
+   data=lagged_reg_data %>%
+     select(-(n_disasters_t:n_disasters_t_2), -(affected_t:log_deaths_t_2), -(n_droughts_t:n_droughts_t_2))) %>% summary()
+
+lm(`Phase_3+ratio_t`~`Phase_3+ratio_t_1`+n_disasters_t, data=lagged_reg_data) %>% summary()
+
+
 lm(`Phase_3+ratio_t`~., data=conflict_disaster_factors_separate) %>% summary()
 lm(`Phase_3+ratio_t`~., data=conflict_disaster_factors_together) %>% summary()
 

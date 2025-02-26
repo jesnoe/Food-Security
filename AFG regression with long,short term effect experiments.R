@@ -353,7 +353,12 @@ lagged_data_by_m <- function(lagged_months, min_t) {
     lagged_reg_data <- bind_rows(lagged_reg_data, reg_data_i %>% as_tibble)
   }
   lagged_reg_data[is.na(lagged_reg_data)] <- 0
-  return(lagged_reg_data)
+  
+  result <- list()
+  result$lagged_reg_data <- lagged_reg_data
+  result$conflict_Afg_aggr <- conflict_Afg_aggr
+  result$disaster_Afg_monthly_aggr <- disaster_Afg_monthly_aggr
+  return(result)
 } # function end
 
 n_t <- nrow(IPC_Afg_year_month)
@@ -366,8 +371,117 @@ for (i in 1:12) {
   lagged_reg_data_list[[paste0("months_", i)]] <- lagged_data_by_m(m, 9) # min_t = 9
 }
 
-lm(`Phase_3+ratio_t`~., data=lagged_reg_data_list$months_2 %>% select(-n_floods_t, -n_droughts_t)) %>% summary()
-lm(`Phase_3+ratio_t`~., data=lagged_reg_data_list$months_2 %>% select(-n_disasters_t)) %>% summary()
+lm(`Phase_3+ratio_t`~., data=lagged_reg_data_list$months_2$lagged_reg_data %>% select(-n_floods_t, -n_droughts_t)) %>% summary()
+lm(`Phase_3+ratio_t`~., data=lagged_reg_data_list$months_2$lagged_reg_data %>% select(-n_disasters_t)) %>% summary()
+
+lagged_reg_data_list$months_1$disaster_Afg_monthly_aggr
+
+lm(`Phase_3+ratio_t`~`Phase_3+ratio_t_1`+n_floods_t, data=lagged_reg_data_list$months_8$lagged_reg_data) %>% summary()
+lm(`Phase_3+ratio_t`~`Phase_3+ratio_t_1`+n_floods_t+wheat_barley, data=lagged_reg_data_list$months_8$lagged_reg_data) %>% summary()
+lm(`Phase_3+ratio_t`~`Phase_3+ratio_t_1`+n_floods_t*wheat_barley, data=lagged_reg_data_list$months_8$lagged_reg_data) %>% summary()
+lm(`Phase_3+ratio_t`~`Phase_3+ratio_t_1`+floods_harvest,
+   data=lagged_reg_data_list$months_8$lagged_reg_data %>% 
+     mutate(floods_harvest = n_floods_t * wheat_barley)) %>% summary()
+
+lm(`Phase_3+ratio_t`~`Phase_3+ratio_t_1`+n_floods_t*harvest,
+   data=lagged_reg_data_list$months_8$lagged_reg_data %>% 
+     mutate(harvest = wheat_barley < 4)) %>% summary()
+
+
+lm(`Phase_3+ratio_t`~`Phase_3+ratio_t_1`+n_droughts_t, data=lagged_reg_data_list$months_8$lagged_reg_data) %>% summary()
+lm(`Phase_3+ratio_t`~`Phase_3+ratio_t_1`+n_droughts_t+wheat_barley, data=lagged_reg_data_list$months_8$lagged_reg_data) %>% summary()
+lm(`Phase_3+ratio_t`~`Phase_3+ratio_t_1`+n_droughts_t*wheat_barley, data=lagged_reg_data_list$months_8$lagged_reg_data) %>% summary()
+lm(`Phase_3+ratio_t`~`Phase_3+ratio_t_1`+floods_harvest,
+   data=lagged_reg_data_list$months_8$lagged_reg_data %>% 
+     mutate(floods_harvest = n_droughts_t * wheat_barley)) %>% summary()
+
+lagged_reg_data_list$months_8$lagged_reg_data %>% select(n_droughts_t, wheat_barley)
+lagged_reg_data_list$months_8$lagged_reg_data$n_droughts_t * lagged_reg_data_list$months_8$lagged_reg_data$wheat_barley
+
+disaster_term_reg_data <- list()
+for (month_ in 1:12) {
+  disaster_term_reg_data[[paste0("lag_month_", month_)]] <- left_join(IPC_Afg_provinces_long %>% mutate(Year = as.character(Year) %>% as.numeric,
+                                                                                                        Month = as.character(Month) %>% as.numeric) %>% 
+                                                                        select(Area, Year, Month, Phase_3above_ratio),
+                                                                      lagged_reg_data_list[[month_]]$disaster_Afg_monthly_aggr %>% 
+                                                                        rename(Year = year, Month=month) %>% 
+                                                                        select(-year_month),
+                                                                      by=c("Area", "Year", "Month"))
+  # for (j in 1:nrow(IPC_Afg_year_month)) {
+  #   year_j <- IPC_Afg_year_month$Year[j]
+  #   month_j <- IPC_Afg_year_month$Month[j]
+  #   IPC_Afg_provinces_long_j <- IPC_Afg_provinces_long %>% 
+  #     filter(Year == year_j & Month == month_j) %>% 
+  #     select(Area, Phase_3above_ratio)
+  #   disaster_j <- lagged_reg_data_list$months_1$disaster_Afg_monthly_aggr %>% 
+  #     filter(year == year_j & month == month_j) %>% 
+  #     select(Area:n_droughts)
+  #   disaster_term_reg_data_mj <- left_join(IPC_Afg_provinces_long_j, disaster_j, by="Area")
+  #   disaster_term_reg_data[[paste0("lag_month_", month_)]][[paste0("ym_", IPC_Afg_year_month$year_month[j])]] <- disaster_term_reg_data_mj
+  # }
+}
+lapply(disaster_term_reg_data, function(x) lm(Phase_3above_ratio~n_floods, x[,-(1:2)]) %>% summary)
+
+lapply(disaster_term_reg_data, function(x) lm(Phase_3above_ratio~n_droughts, x[,-(1:2)]) %>% summary)
+disaster_term_reg_data$lag_month_1
+
+lagged_reg_data_list$months_1$lagged_reg_data
+no_crop_areas <- c("Ghor", "Nimruz", "Nuristan", "Panjshir")
+no_crop_index <- map(which(IPC_Afg_provinces$Area %in% no_crop_areas), function(x) x + 34*(0:9)) %>% unlist %>% sort
+
+lm_month_aggr_floods <- lapply(lagged_reg_data_list,
+                               function(x) lm(`Phase_3+ratio_t`~`Phase_3+ratio_t_1`+month_diff+n_floods_t,
+                                              x$lagged_reg_data %>%
+                                                select(`Phase_3+ratio_t`, `Phase_3+ratio_t_1`, month_diff, n_floods_t)) %>% summary)
+lm_month_aggr_floods_harvesting_areas <- lapply(lagged_reg_data_list,
+                                                function(x) lm(`Phase_3+ratio_t`~`Phase_3+ratio_t_1`+month_diff+n_floods_t,
+                                                               x$lagged_reg_data[-no_crop_index,] %>% 
+                                                                 select(`Phase_3+ratio_t`, `Phase_3+ratio_t_1`, month_diff, n_floods_t)) %>% summary)
+
+lm_month_aggr_floods$months_1$adj.r.squared
+# sapply(lm_month_aggr_floods, function(x) x$coefficients[,1]) %>% 
+#   write.csv("Food Security/Regression results/disaster long short term/floods reg coefs.csv")
+lm_month_aggr_floods_sig <- sapply(lm_month_aggr_floods, function(x) ifelse(x$coefficients[,4] > 0.05, 0, 1))
+lm_month_aggr_floods_sig <- rbind(lm_month_aggr_floods_sig, sapply(lm_month_aggr_floods, function(x) x$adj.r.squared))
+row.names(lm_month_aggr_floods_sig)[5] <- "Adj_R_squared"
+# write.csv(lm_month_aggr_floods_sig, "Food Security/Regression results/disaster long short term/floods reg sig.csv")
+
+# sapply(lm_month_aggr_floods_harvesting_areas, function(x) x$coefficients[,1]) %>%
+#   write.csv("Food Security/Regression results/disaster long short term/floods reg coefs harvesting areas.csv")
+lm_month_aggr_floods_harvesting_areas_sig <- sapply(lm_month_aggr_floods_harvesting_areas, function(x) ifelse(x$coefficients[,4] > 0.05, 0, 1))
+lm_month_aggr_floods_harvesting_areas_sig <- rbind(lm_month_aggr_floods_harvesting_areas_sig, 
+                                                   sapply(lm_month_aggr_floods_harvesting_areas, function(x) x$adj.r.squared))
+row.names(lm_month_aggr_floods_harvesting_areas_sig)[5] <- "Adj_R_squared"
+# write.csv(lm_month_aggr_floods_harvesting_areas_sig, "Food Security/Regression results/disaster long short term/floods reg sig harvesting areas.csv")
+
+lm_month_aggr_droughts <- lapply(lagged_reg_data_list,
+                                 function(x) lm(`Phase_3+ratio_t`~`Phase_3+ratio_t_1`+month_diff+n_droughts_t,
+                                            x$lagged_reg_data %>% 
+                                              select(`Phase_3+ratio_t`, `Phase_3+ratio_t_1`, month_diff, n_droughts_t)) %>% summary)
+lm_month_aggr_droughts_harvesting_areas <- lapply(lagged_reg_data_list,
+                                                  function(x) lm(`Phase_3+ratio_t`~`Phase_3+ratio_t_1`+month_diff+n_droughts_t,
+                                            x$lagged_reg_data[-no_crop_index,] %>% 
+                                              select(`Phase_3+ratio_t`, `Phase_3+ratio_t_1`, month_diff, n_droughts_t)) %>% summary)
+
+# sapply(lm_month_aggr_droughts[-1], function(x) x$coefficients[,1]) %>% 
+#   write.csv("Food Security/Regression results/disaster long short term/droughts reg coefs.csv")
+lm_month_aggr_droughts_sig <- sapply(lm_month_aggr_droughts[-1], function(x) ifelse(x$coefficients[,4] > 0.05, 0, 1))
+lm_month_aggr_droughts_sig <- rbind(lm_month_aggr_droughts_sig, sapply(lm_month_aggr_droughts[-1], function(x) x$adj.r.squared))
+row.names(lm_month_aggr_droughts_sig)[5] <- "Adj_R_squared"
+# write.csv(lm_month_aggr_droughts_sig, "Food Security/Regression results/disaster long short term/droughts reg sig.csv")
+
+# sapply(lm_month_aggr_droughts_harvesting_areas[-1], function(x) x$coefficients[,1]) %>%
+#   write.csv("Food Security/Regression results/disaster long short term/droughts reg coefs harvesting areas.csv")
+lm_month_aggr_droughts_harvesting_areas_sig <- sapply(lm_month_aggr_droughts_harvesting_areas[-1], function(x) ifelse(x$coefficients[,4] > 0.05, 0, 1))
+lm_month_aggr_droughts_harvesting_areas_sig <- rbind(lm_month_aggr_droughts_harvesting_areas_sig, 
+                                                     sapply(lm_month_aggr_droughts_harvesting_areas[-1], function(x) x$adj.r.squared))
+row.names(lm_month_aggr_droughts_harvesting_areas_sig)[5] <- "Adj_R_squared"
+# write.csv(lm_month_aggr_droughts_harvesting_areas_sig, "Food Security/Regression results/disaster long short term/droughts reg sig harvesting areas.csv")
+
+lapply(lagged_reg_data_list, function(x) lm(`Phase_3+ratio_t`~`Phase_3+ratio_t_1`+month_diff+n_floods_t+n_droughts_t,
+                                            x$lagged_reg_data %>% select(`Phase_3+ratio_t`, `Phase_3+ratio_t_1`, month_diff, n_floods_t, n_droughts_t)) %>% summary)
+
+
 
 lagged_reg_data_lm <- lapply(lagged_reg_data_list,
        function(x) lm(`Phase_3+ratio_t`~., data=x %>% select(-n_disasters_t)) %>% summary())
