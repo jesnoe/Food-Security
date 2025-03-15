@@ -53,7 +53,7 @@ library(psych)
   
   IPC_SDN_provinces <- IPC_SDN_provinces_long %>% select(Area, Year, Month, Phase_3above_ratio) %>% 
     pivot_wider(id_cols=Area, names_prefix="Phase_3+ratio_", names_from = c("Year", "Month"), values_from = Phase_3above_ratio) %>% 
-    relocate(Area, `Phase_3+ratio_2017_6`)
+    relocate(Area, `Phase_3+ratio_2019_6`)
   
   IPC_SDN_year_month <- IPC_SDN %>% select(Year, Month) %>% unique %>%
     mutate(across(c(Year, Month), function(x) as.character(x) %>% as.numeric),
@@ -90,15 +90,15 @@ library(psych)
   
   conflict_SDN <- conflict_AF %>% filter(country == "Sudan") # 66,500 # much more than CAR
   conflict_SDN$event_date <- as.Date(conflict_SDN$event_date, format="%m/%d/%Y")
-  conflict_SDN$month <- month(conflict_SDN$event_date) %>% as.factor
+  conflict_SDN$month <- month(conflict_SDN$event_date)
   conflict_SDN <- conflict_SDN %>% relocate(event_id_cnty, event_date, year, month)
   conflict_SDN$admin1[which(conflict_SDN$admin1 == "Al Jazirah")] <- "Gezira"
   
   # from https://ipad.fas.usda.gov/countrysummary/Default.aspx?id=SU
   # plant: 10~12, growing: 1~4, harvest: 5~7
-  crop_seasons <- tibble(month=1:12,
-                         season=c(rep("none", 5), rep("plant", 2), rep("grow", 3), rep("harvest", 2)))
-  
+  crop_seasons_SDN <- tibble(month=1:12,
+                             season=c(rep("none", 5), rep("plant", 2), rep("grow", 3), rep("harvest", 2)))
+  no_crop_areas_SDN <- c()
   
   SDN_sorghum <- c(11:12)
   
@@ -116,8 +116,26 @@ library(psych)
   SDN_harvest <- list(sorghum=SDN_sorghum)
   
   conflict_types <- conflict_SDN %>% select(event_type, sub_event_type) %>% unique %>% arrange(event_type, sub_event_type)
-  no_crop_areas <- c("Mongala", "Tshuapa", "Kasai Oriental", "Kinshasa", "Ituri", "Sud Kivu")
 }
+
+n_t <- nrow(IPC_SDN_year_month)
+oldest_year <- IPC_SDN_year_month$Year[1]-1; oldest_month <- IPC_SDN_year_month$Month[1] # year - 1 to gen t-12 at most
+latest_year <- IPC_SDN_year_month$Year[n_t]; latest_month <- IPC_SDN_year_month$Month[n_t]
+
+disaster_SDN %>% 
+  filter(year > oldest_year - 1) %>% 
+  filter(!(year == latest_year & month > latest_month)) %>% 
+  filter(!(year == oldest_year & month < oldest_month)) %>% 
+  pull(`Disaster Type`) %>% table %>% as_tibble %>% rename(disaster=".")
+
+conflict_NAT <- conflict_SDN
+disaster_NAT <- disaster_SDN
+IPC_NAT_provinces <- IPC_SDN_provinces
+IPC_NAT_provinces_long <- IPC_SDN_provinces_long
+IPC_NAT_year_month <- IPC_SDN_year_month
+IPC_NAT_year_month_list <- IPC_SDN_year_month_list
+crop_seasons <- crop_seasons_SDN
+no_crop_areas <- no_crop_areas_SDN
 
 lagged_data_by_m <- function(lagged_months, min_t) {
   conflict_SDN_aggr <- conflict_SDN %>% 
@@ -358,312 +376,3 @@ lagged_data_by_m <- function(lagged_months, min_t) {
   result$disaster_SDN_monthly_aggr <- disaster_SDN_monthly_aggr
   return(result)
 } # function end
-
-n_t <- nrow(IPC_SDN_year_month)
-oldest_year <- IPC_SDN_year_month$Year[1]-1; oldest_month <- IPC_SDN_year_month$Month[1] # year - 1 to gen t-12 at most
-latest_year <- IPC_SDN_year_month$Year[n_t]; latest_month <- IPC_SDN_year_month$Month[n_t]
-
-lagged_reg_data_list <- list()
-for (i in 1:5) {
-  m <- i
-  lagged_reg_data_list[[paste0("months_", i)]] <- lagged_data_by_m(m, 5) # min_t = 5
-}
-
-lm(`Phase_3+ratio_t`~., data=lagged_reg_data_list$months_2$lagged_reg_data %>% select(-n_floods_t, -n_droughts_t)) %>% summary()
-lm(`Phase_3+ratio_t`~., data=lagged_reg_data_list$months_2$lagged_reg_data %>% select(-n_disasters_t)) %>% summary()
-
-IPC_SDN_phase3_long <- IPC_SDN_provinces_long %>% 
-  mutate(year = as.character(Year) %>% as.numeric,
-         month = as.character(Month) %>% as.numeric) %>% 
-  ungroup(Year) %>% 
-  select(Area, year, month, Phase_3above_ratio) %>% 
-  mutate(IPC_diff = Phase_3above_ratio - lag(Phase_3above_ratio),) %>% 
-  left_join(crop_seasons, by="month")
-
-
-conflict_map <- function(month_aggr, filter_=F, growing_region=F) {
-  IPC_SDN_phase3_long_month <- IPC_SDN_phase3_long %>% 
-    left_join(lagged_reg_data_list[[month_aggr]]$conflict_SDN_aggr %>% select(-year_month),
-              by=c("Area", "year", "month"))
-  
-  if (is.character(filter_)) IPC_SDN_phase3_long_month <- IPC_SDN_phase3_long_month %>% filter(event_type == filter_) 
-  else filter_ <- ""
-  
-  if (growing_region) IPC_SDN_phase3_long_month <- IPC_SDN_phase3_long_month %>% filter(!(Area %in% no_crop_areas))
-  
-  IPC_SDN_phase3_long_month %>% ggplot() +
-    geom_point(aes(x=Phase_3above_ratio, y=n_events, group=event_type, color=event_type)) +
-    ggtitle(filter_)
-}
-
-
-conflict_diff_map <- function(month_aggr, filter_=F, growing_region=F) {
-  IPC_SDN_phase3_long_month <- IPC_SDN_phase3_long %>% 
-    left_join(lagged_reg_data_list[[month_aggr]]$conflict_SDN_aggr %>% select(-year_month),
-              by=c("Area", "year", "month")) 
-  
-  if (is.character(filter_)) IPC_SDN_phase3_long_month <- IPC_SDN_phase3_long_month %>% filter(event_type == filter_) 
-  else filter_ <- ""
-  
-  if (growing_region) IPC_SDN_phase3_long_month <- IPC_SDN_phase3_long_month %>% filter(!(Area %in% no_crop_areas))
-  
-  IPC_SDN_phase3_long_month %>% ggplot() +
-    geom_point(aes(x=IPC_diff, y=n_events, group=event_type, color=event_type))
-}
-
-conflict_sub_n_events <- function(month_aggr, conflict_type, growing_region=F) {
-  IPC_SDN_phase3_long_conflict <- left_join(IPC_SDN_phase3_long,
-                                            lagged_reg_data_list[[month_aggr]]$conflict_sub_SDN_aggr,
-                                            by=c("Area", "year", "month"))
-  
-  if (growing_region) IPC_SDN_phase3_long_conflict <- IPC_SDN_phase3_long_conflict %>% filter(!(Area %in% no_crop_areas))
-  
-  IPC_SDN_phase3_long_conflict %>% filter(event_type == conflict_type) %>% 
-    ggplot() +
-    geom_point(aes(x=Phase_3above_ratio, y=n_events, group=sub_event_type, color=sub_event_type)) +
-    ggtitle(conflict_type)
-}
-
-conflict_sub_fatalities <- function(month_aggr,conflict_type, growing_region=F) {
-  IPC_SDN_phase3_long_conflict <- left_join(IPC_SDN_phase3_long,
-                                            lagged_reg_data_list[[month_aggr]]$conflict_sub_SDN_aggr,
-                                            by=c("Area", "year", "month"))
-  
-  if (growing_region) IPC_SDN_phase3_long_conflict <- IPC_SDN_phase3_long_conflict %>% filter(!(Area %in% no_crop_areas))
-  
-  IPC_SDN_phase3_long_conflict %>% filter(event_type == conflict_type) %>% 
-    ggplot() +
-    geom_point(aes(x=Phase_3above_ratio, y=fatalities, group=sub_event_type, color=sub_event_type)) +
-    ggtitle(conflict_type)
-}
-
-conflict_n_events_harvest <- function(month_aggr, conflict_type, diff_=F, growing_region=F) {
-  IPC_SDN_phase3_long_conflict <- left_join(IPC_SDN_phase3_long,
-                                            lagged_reg_data_list[[month_aggr]]$conflict_sub_SDN_aggr,
-                                            by=c("Area", "year", "month"))
-  
-  if (growing_region) IPC_SDN_phase3_long_conflict <- IPC_SDN_phase3_long_conflict %>% filter(!(Area %in% no_crop_areas))
-  
-  if (diff_) {
-    IPC_SDN_phase3_long_conflict %>% filter(event_type == conflict_type) %>% 
-      ggplot() +
-      geom_point(aes(x=IPC_diff, y=n_events, group=season, color=season)) +
-      ggtitle(conflict_type)
-  }else{
-    IPC_SDN_phase3_long_conflict %>% filter(event_type == conflict_type) %>% 
-      ggplot() +
-      geom_point(aes(x=Phase_3above_ratio, y=n_events, group=season, color=season)) +
-      ggtitle(conflict_type) 
-  }
-}
-
-conflict_fatalities_harvest <- function(month_aggr, conflict_type, diff_=F, growing_region=F) {
-  IPC_SDN_phase3_long_conflict <- left_join(IPC_SDN_phase3_long,
-                                            lagged_reg_data_list[[month_aggr]]$conflict_sub_SDN_aggr,
-                                            by=c("Area", "year", "month"))
-  if (growing_region) IPC_SDN_phase3_long_conflict <- IPC_SDN_phase3_long_conflict %>% filter(!(Area %in% no_crop_areas))
-  
-  if (diff_) {
-    IPC_SDN_phase3_long_conflict %>% filter(event_type == conflict_type) %>% 
-      ggplot() +
-      geom_point(aes(x=IPC_diff, y=fatalities, group=season, color=season)) +
-      ggtitle(conflict_type)
-  }else{
-    IPC_SDN_phase3_long_conflict %>% filter(event_type == conflict_type) %>% 
-      ggplot() +
-      geom_point(aes(x=Phase_3above_ratio, y=fatalities, group=season, color=season)) +
-      ggtitle(conflict_type) 
-  }
-  if (growing_region) IPC_SDN_phase3_long_conflict <- IPC_SDN_phase3_long_conflict %>% filter(!(Area %in% no_crop_areas))}
-
-conflict_sub_n_events_diff <- function(month_aggr, conflict_type, growing_region=F) {
-  IPC_SDN_phase3_long_conflict <- left_join(IPC_SDN_phase3_long,
-                                            lagged_reg_data_list[[month_aggr]]$conflict_sub_SDN_aggr,
-                                            by=c("Area", "year", "month"))
-  if (growing_region) IPC_SDN_phase3_long_conflict <- IPC_SDN_phase3_long_conflict %>% filter(!(Area %in% no_crop_areas))
-  
-  IPC_SDN_phase3_long_conflict %>% filter(event_type == conflict_type) %>% 
-    ggplot() +
-    geom_point(aes(x=IPC_diff, y=n_events, group=sub_event_type, color=sub_event_type)) +
-    ggtitle(conflict_type)
-}
-
-conflict_sub_fatalities_diff <- function(month_aggr, conflict_type, growing_region=F) {
-  IPC_SDN_phase3_long_conflict <- left_join(IPC_SDN_phase3_long,
-                                            lagged_reg_data_list[[month_aggr]]$conflict_sub_SDN_aggr,
-                                            by=c("Area", "year", "month"))
-  if (growing_region) IPC_SDN_phase3_long_conflict <- IPC_SDN_phase3_long_conflict %>% filter(!(Area %in% no_crop_areas))
-  
-  IPC_SDN_phase3_long_conflict %>% filter(event_type == conflict_type) %>% 
-    ggplot() +
-    geom_point(aes(x=IPC_diff, y=fatalities, group=sub_event_type, color=sub_event_type)) +
-    ggtitle(conflict_type)
-}
-
-conflict_n_events_national <- function(month_aggr, filter_=F, growing_region=F, diff_=F) {
-  IPC_SDN_phase3_long_month <- IPC_SDN_phase3_long %>% 
-    left_join(lagged_reg_data_list[[month_aggr]]$conflict_SDN_aggr %>% select(-year_month) %>% 
-                group_by(year, month, event_type) %>%
-                summarize(n_events = sum(n_events)),
-              by=c("year", "month"))
-  
-  if (is.character(filter_)) IPC_SDN_phase3_long_month <- IPC_SDN_phase3_long_month %>% filter(event_type == filter_) 
-  else filter_ <- ""
-  
-  if (growing_region) IPC_SDN_phase3_long_month <- IPC_SDN_phase3_long_month %>% filter(!(Area %in% no_crop_areas))
-  
-  if (diff_) {
-    IPC_SDN_phase3_long_month %>% ggplot() +
-      geom_point(aes(x=IPC_diff, y=n_events, group=Area, color=Area)) +
-      ggtitle(filter_)
-  }else{
-    IPC_SDN_phase3_long_month %>% ggplot() +
-      geom_point(aes(x=Phase_3above_ratio, y=n_events, group=Area, color=Area)) +
-      ggtitle(filter_)
-  }
-}
-
-disaster_map <- function(month_aggr, disaster_type) {
-  IPC_Afg_phase3_long_month <- IPC_Afg_phase3_long %>% 
-    left_join(lagged_reg_data_list[[month_aggr]]$disaster_Afg_monthly_aggr %>% select(-year_month),
-              by=c("Area", "year", "month"))
-  
-  names(IPC_Afg_phase3_long_month)[which(names(IPC_Afg_phase3_long_month) == disaster_type)] <- "y_val"
-  
-  IPC_Afg_phase3_long_month %>% ggplot() +
-    geom_point(aes(x=Phase_3above_ratio, y=y_val, group=season, color=season)) +
-    ylab(disaster_type)
-}
-
-disaster_diff_map <- function(month_aggr, disaster_type) {
-  IPC_Afg_phase3_long_month <- IPC_Afg_phase3_long %>% 
-    left_join(lagged_reg_data_list[[month_aggr]]$disaster_Afg_monthly_aggr %>% select(-year_month),
-              by=c("Area", "year", "month"))
-  
-  names(IPC_Afg_phase3_long_month)[which(names(IPC_Afg_phase3_long_month) == disaster_type)] <- "y_val"
-  
-  IPC_Afg_phase3_long_month %>% ggplot() +
-    geom_point(aes(x=IPC_diff, y=y_val, group=season, color=season)) +
-    ylab(disaster_type)
-}
-
-corn_seasons <- tibble(month=1:12,
-                       season=c("none", rep("plant", 2), rep("grow", 2), rep("harvest", 2), rep("none", 2), rep("plant", 3), "none"))
-rice_seasons <- tibble(month=1:12,
-                       season=c(rep("grow", 4), rep("harvest", 3), rep("none", 2), rep("plant", 3)))
-
-conflict_SDN %>% select(event_type, sub_event_type) %>% unique %>% arrange(event_type, sub_event_type) %>% print(n=24)
-
-conflict_map(1)
-conflict_map(1, growing_region = T)
-conflict_map(1, "Battles")
-conflict_map(1, "Explosions/Remote violence")
-conflict_map(1, "Protests")
-conflict_map(1, "Riots")
-conflict_map(1, "Strategic developments")
-conflict_map(1, "Violence against civilians")
-
-conflict_diff_map(1)
-conflict_diff_map(2)
-conflict_diff_map(3)
-conflict_diff_map(4)
-conflict_diff_map(1, "Battles")
-conflict_diff_map(1, "Explosions/Remote violence")
-conflict_diff_map(1, "Protests")
-conflict_diff_map(1, "Riots")
-conflict_diff_map(1, "Strategic developments")
-conflict_diff_map(1, "Violence against civilians")
-
-conflict_6types <- unique(conflict_types$event_type)
-
-month_aggr_ <- 1
-conflict_sub_n_events(month_aggr_, conflict_6types[1])
-conflict_sub_n_events(month_aggr_, conflict_6types[1], growing_region = T)
-conflict_sub_n_events(month_aggr_, conflict_6types[2])
-conflict_sub_n_events(month_aggr_, conflict_6types[2], growing_region = T)
-conflict_sub_n_events(month_aggr_, conflict_6types[3])
-conflict_sub_n_events(month_aggr_, conflict_6types[3], growing_region = T)
-conflict_sub_n_events(month_aggr_, conflict_6types[4])
-conflict_sub_n_events(month_aggr_, conflict_6types[4], growing_region = T)
-conflict_sub_n_events(month_aggr_, conflict_6types[5])
-conflict_sub_n_events(month_aggr_, conflict_6types[5], growing_region = T)
-conflict_sub_n_events(month_aggr_, conflict_6types[6])
-conflict_sub_n_events(month_aggr_, conflict_6types[6], growing_region = T)
-
-conflict_sub_fatalities(month_aggr_, conflict_6types[1])
-conflict_sub_fatalities(month_aggr_, conflict_6types[1], growing_region = T)
-conflict_sub_fatalities(month_aggr_, conflict_6types[2])
-conflict_sub_fatalities(month_aggr_, conflict_6types[2], growing_region = T)
-conflict_sub_fatalities(month_aggr_, conflict_6types[3])
-conflict_sub_fatalities(month_aggr_, conflict_6types[3], growing_region = T)
-conflict_sub_fatalities(month_aggr_, conflict_6types[4])
-conflict_sub_fatalities(month_aggr_, conflict_6types[4], growing_region = T)
-conflict_sub_fatalities(month_aggr_, conflict_6types[5])
-conflict_sub_fatalities(month_aggr_, conflict_6types[5], growing_region = T)
-conflict_sub_fatalities(month_aggr_, conflict_6types[6])
-conflict_sub_fatalities(month_aggr_, conflict_6types[6], growing_region = T)
-
-conflict_sub_n_events_diff(month_aggr_, conflict_6types[1])
-conflict_sub_n_events_diff(month_aggr_, conflict_6types[1], growing_region = T)
-conflict_sub_n_events_diff(month_aggr_, conflict_6types[2])
-conflict_sub_n_events_diff(month_aggr_, conflict_6types[2], growing_region = T)
-conflict_sub_n_events_diff(month_aggr_, conflict_6types[3])
-conflict_sub_n_events_diff(month_aggr_, conflict_6types[3], growing_region = T)
-conflict_sub_n_events_diff(month_aggr_, conflict_6types[4])
-conflict_sub_n_events_diff(month_aggr_, conflict_6types[4], growing_region = T)
-conflict_sub_n_events_diff(month_aggr_, conflict_6types[5])
-conflict_sub_n_events_diff(month_aggr_, conflict_6types[5], growing_region = T)
-conflict_sub_n_events_diff(month_aggr_, conflict_6types[6])
-conflict_sub_n_events_diff(month_aggr_, conflict_6types[6], growing_region = T)
-
-conflict_sub_fatalities_diff(month_aggr_, conflict_6types[1])
-conflict_sub_fatalities_diff(month_aggr_, conflict_6types[2])
-conflict_sub_fatalities_diff(month_aggr_, conflict_6types[3])
-conflict_sub_fatalities_diff(month_aggr_, conflict_6types[4])
-conflict_sub_fatalities_diff(month_aggr_, conflict_6types[5])
-conflict_sub_fatalities_diff(month_aggr_, conflict_6types[6])
-
-conflict_n_events_harvest(month_aggr_, conflict_6types[1])
-conflict_n_events_harvest(month_aggr_, conflict_6types[2])
-conflict_n_events_harvest(month_aggr_, conflict_6types[3])
-conflict_n_events_harvest(month_aggr_, conflict_6types[4])
-conflict_n_events_harvest(month_aggr_, conflict_6types[5])
-conflict_n_events_harvest(month_aggr_, conflict_6types[6])
-
-conflict_n_events_harvest(month_aggr_, conflict_6types[1], diff_=T)
-conflict_n_events_harvest(month_aggr_, conflict_6types[2], diff_=T)
-conflict_n_events_harvest(month_aggr_, conflict_6types[3], diff_=T)
-conflict_n_events_harvest(month_aggr_, conflict_6types[4], diff_=T)
-conflict_n_events_harvest(month_aggr_, conflict_6types[5], diff_=T)
-conflict_n_events_harvest(month_aggr_, conflict_6types[6], diff_=T)
-
-conflict_fatalities_harvest(month_aggr_, conflict_6types[1])
-conflict_fatalities_harvest(month_aggr_, conflict_6types[2])
-conflict_fatalities_harvest(month_aggr_, conflict_6types[3])
-conflict_fatalities_harvest(month_aggr_, conflict_6types[4])
-conflict_fatalities_harvest(month_aggr_, conflict_6types[5])
-conflict_fatalities_harvest(month_aggr_, conflict_6types[6])
-
-conflict_fatalities_harvest(month_aggr_, conflict_6types[1], diff_=T)
-conflict_fatalities_harvest(month_aggr_, conflict_6types[2], diff_=T)
-conflict_fatalities_harvest(month_aggr_, conflict_6types[3], diff_=T)
-conflict_fatalities_harvest(month_aggr_, conflict_6types[4], diff_=T)
-conflict_fatalities_harvest(month_aggr_, conflict_6types[5], diff_=T)
-conflict_fatalities_harvest(month_aggr_, conflict_6types[6], diff_=T)
-
-conflict_n_events_national(month_aggr_, conflict_6types[1])
-conflict_n_events_national(month_aggr_, conflict_6types[1], growing_region = T)
-conflict_n_events_national(month_aggr_, conflict_6types[2])
-conflict_n_events_national(month_aggr_, conflict_6types[2], growing_region = T)
-conflict_n_events_national(month_aggr_, conflict_6types[3])
-conflict_n_events_national(month_aggr_, conflict_6types[4])
-conflict_n_events_national(month_aggr_, conflict_6types[5])
-conflict_n_events_national(month_aggr_, conflict_6types[6])
-
-conflict_n_events_national(month_aggr_, conflict_6types[1], diff_=T)
-conflict_n_events_national(month_aggr_, conflict_6types[1], diff_=T, growing_region = T)
-conflict_n_events_national(month_aggr_, conflict_6types[2], diff_=T)
-conflict_n_events_national(month_aggr_, conflict_6types[3], diff_=T)
-conflict_n_events_national(month_aggr_, conflict_6types[4], diff_=T)
-conflict_n_events_national(month_aggr_, conflict_6types[5], diff_=T)
-conflict_n_events_national(month_aggr_, conflict_6types[6], diff_=T)

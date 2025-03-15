@@ -366,12 +366,15 @@ oldest_year <- IPC_Afg_year_month$Year[1]-1; oldest_month <- IPC_Afg_year_month$
 latest_year <- IPC_Afg_year_month$Year[n_t]; latest_month <- IPC_Afg_year_month$Month[n_t]
 
 lagged_reg_data_list <- list()
-for (i in 1:12) {
+for (i in 1:4) {
   m <- i
   lagged_reg_data_list[[paste0("months_", i)]] <- lagged_data_by_m(m, 9) # min_t = 9
 }
 
-lm(`Phase_3+ratio_t`~., data=lagged_reg_data_list$months_2$lagged_reg_data %>% select(-n_floods_t, -n_droughts_t)) %>% summary()
+lm(`Phase_3+ratio_t`~.,
+   data=lagged_reg_data_list$months_4$lagged_reg_data %>%
+     select(-n_floods_t, -n_droughts_t, -wheat_barley) %>% 
+     mutate(year = as.factor(year))) %>% summary()
 lm(`Phase_3+ratio_t`~., data=lagged_reg_data_list$months_2$lagged_reg_data %>% select(-n_disasters_t)) %>% summary()
 
 lagged_reg_data_list$months_1$disaster_Afg_monthly_aggr

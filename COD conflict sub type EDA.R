@@ -64,10 +64,15 @@ library(psych)
   IPC_AF$Subarea <- gsub("_[0-9,A-z]+$", "", IPC_AF$Subarea)
   
   IPC_COD <- IPC_AF %>% filter(Country == "Congo, DRC") %>%  # 1058
-    mutate(Area = ifelse(is.na(Area) & Subarea %in% COD_map$shapeName, Subarea, Area),
+    mutate(Subarea = stri_trans_general(Subarea, "Latin-ASCII"),
+           Subarea = gsub("-", " ", Subarea),
+           Subarea = str_to_title(Subarea),
+           Subarea = gsub("Mai Ndombe", "Mai-Ndombe", Subarea),
+           Area = ifelse(is.na(Area) & Subarea %in% COD_map$shapeName, Subarea, Area),
            Area = stri_trans_general(Area, "Latin-ASCII"),
            Area = gsub("-", " ", Area),
            Area = gsub("Mai Ndombe", "Mai-Ndombe", Area))
+  IPC_COD$Area[c(which(IPC_COD$Subarea == "Kasai Central"), which(IPC_COD$Subarea == "Tanganyka"))] <- c("Central Kasai", "Tanganyika")
   IPC_COD$Date %>% unique %>% sort # "2017-06-01" "2018-06-01" "2019-06-01" "2020-07-01" "2021-02-01" "2021-09-01" "2022-07-01" "2023-08-01"
   
   IPC_COD_provinces_long <- IPC_COD %>%
@@ -114,6 +119,7 @@ library(psych)
   conflict_COD <- conflict_AF %>% filter(country == "Democratic Republic of Congo") # 32,538
   conflict_COD$event_date <- as.Date(conflict_COD$event_date, format="%m/%d/%Y")
   conflict_COD$month <- month(conflict_COD$event_date)
+  conflict_COD <- conflict_COD %>% relocate(event_id_cnty, event_date, year, month)
   
   conflict_COD$admin1 %>% unique %>% sort
   
@@ -127,6 +133,19 @@ library(psych)
   COD_south_corn <- 3:5 # Extreme South: Haut Katanga Province
   COD_rice <- c(1:3, 7, 8)
   COD_south_rice <- 1:3
+  corn_seasons <- tibble(month=1:12,
+                         plant = c(rep(1,3), rep(0,2), rep(1,4), rep(0,3)),
+                         grow = c(0,0, rep(1,3), 0,0, rep(1,3), 0,0),
+                         harvest = c(rep(0,4), rep(1,3), 0,0, rep(1,3)),
+                         none = c(1,0,0, rep(1,3), rep(0,5), 1))
+  seasons <- c("plant", "grow", "harvest", "none")
+  corn_seasons$season <- apply(corn_seasons, 1, function(x) paste(seasons[which(x[-1]==1)], collapse="/"))
+  corn_seasons$season_south <- c(rep("grow",2), rep("harvest",3), rep("none",5), rep("plant",2))
+  gsub("/none", "", corn_seasons$season) %>% unique # 5 unique seasons
+  
+  rice_seasons <- tibble(month=1:12,
+                         season=c(rep("harvest", 3), rep("plant",2), "grow", rep("harvest",2), rep("plant", 2), rep("grow", 2)),
+                         season_south=c(rep("harvest",3), rep("none",5), rep("plant",2), rep("grow",2)))
   
   time_since_harvest <- function(month., crop, country_harvest_season) {
     if (crop == "wheat_barley") {
@@ -145,248 +164,27 @@ library(psych)
                       rice_south=COD_south_rice)
   
   conflict_types <- conflict_COD %>% select(event_type, sub_event_type) %>% unique %>% arrange(event_type, sub_event_type)
-  no_crop_areas <- c("Mongala", "Tshuapa", "Kasai Oriental", "Kinshasa", "Ituri", "Sud Kivu")
+  no_crop_areas_COD <- c("Mongala", "Tshuapa", "Kasai Oriental", "Kinshasa", "Ituri", "Sud Kivu")
 }
 
-lagged_data_by_m <- function(lagged_months, min_t) {
-  conflict_COD_aggr <- conflict_COD %>% 
-    filter(!(year == latest_year & month > latest_month)) %>% 
-    filter(!(year == oldest_year & month < oldest_month)) %>% 
-    group_by(year, month, admin1, event_type) %>% 
-    summarise(n_events=n(),
-              fatalities=sum(fatalities, na.rm=T)) %>% 
-    rename(Area=admin1) %>% 
-    arrange(year, month) %>% 
-    mutate(year_month = paste(year, month, sep="_"))
-  conflict_COD_aggr <- conflict_COD_aggr[,-(1:2)] %>% 
-    complete(year_month = lapply(IPC_COD_year_month_list[1:(lagged_months+1)], function(x) x$year_month) %>% unlist,
-             event_type = unique(conflict_COD_aggr$event_type)) %>%
-    mutate(month = substr(year_month, 6, str_length(year_month)) %>% as.numeric,
-           year = substr(year_month, 1, 4) %>% as.numeric) %>% 
-    arrange(year, month)
-  conflict_COD_aggr[is.na(conflict_COD_aggr)] <- 0
-  
-  lagged_conflict <- list()
-  for (i in 1:nrow(IPC_COD_year_month)) {
-    year_i <- IPC_COD_year_month$Year[i]
-    month_i <- IPC_COD_year_month$Month[i]
-    year_month_i <- paste(year_i, month_i, sep="_")
-    prev_month <- ifelse(month_i > lagged_months, month_i - lagged_months, month_i + 12 - lagged_months)
-    prev_year <- ifelse(month_i > lagged_months, year_i, year_i - 1)
-    prev_months_index <- which(conflict_COD_aggr$year == prev_year & conflict_COD_aggr$month == prev_month)[1]
-    months_index_i <- rev(which(conflict_COD_aggr$year == year_i & conflict_COD_aggr$month == month_i))[1]
-    lagged_conflict[[year_month_i]] <- conflict_COD_aggr[prev_months_index:months_index_i,] %>% 
-      select(-year_month, -month, -year) %>% 
-      group_by(Area, event_type) %>% 
-      summarize(n_events=sum(n_events),
-                fatalities=sum(fatalities)) %>% 
-      mutate(year_month = year_month_i,
-             year = year_i,
-             month = month_i)
-  }
-  
-  conflict_COD_aggr <- lagged_conflict[[IPC_COD_year_month$year_month[1]]][1,]
-  for (tbl in lagged_conflict) {
-    conflict_COD_aggr <- bind_rows(conflict_COD_aggr, tbl)
-  }
-  conflict_COD_aggr <- conflict_COD_aggr[-1,]
-  
-  conflict_COD_n_events <- conflict_COD_aggr %>% 
-    group_by(year, month, Area, event_type) %>% 
-    summarise(n_events=sum(n_events)) %>% 
-    pivot_wider(id_cols=Area, names_from = c(event_type, year, month), values_from = n_events)
-  conflict_COD_n_events[is.na(conflict_COD_n_events)] <- 0
-  
-  conflict_COD_fatalities <- conflict_COD_aggr %>% 
-    group_by(year, month, Area, event_type) %>% 
-    summarise(log_fatalities=log(1+sum(fatalities, na.rm=T))) %>% 
-    pivot_wider(id_cols=Area, names_from = c(event_type, year, month), values_from = log_fatalities)
-  conflict_COD_fatalities[is.na(conflict_COD_fatalities)] <- 0
-  
-  conflict_sub_COD_aggr <- conflict_COD %>% 
-    filter(!(year == latest_year & month > latest_month)) %>% 
-    filter(!(year == oldest_year & month < oldest_month)) %>% 
-    group_by(year, month, admin1, sub_event_type) %>% 
-    summarise(n_events=n(),
-              fatalities=sum(fatalities, na.rm=T)) %>% 
-    rename(Area=admin1) %>% 
-    arrange(year, month) %>% 
-    mutate(year_month = paste(year, month, sep="_"))
-  conflict_sub_COD_aggr <- conflict_sub_COD_aggr[,-(1:2)] %>% 
-    complete(year_month,
-             sub_event_type) %>%
-    mutate(month = substr(year_month, 6, str_length(year_month)) %>% as.numeric,
-           year = substr(year_month, 1, 4) %>% as.numeric) %>% 
-    left_join(conflict_types, by="sub_event_type") %>% 
-    arrange(year, month)
-  
-  
-  conflict_sub_COD_aggr[is.na(conflict_sub_COD_aggr)] <- 0
-  
-  lagged_conflict <- list()
-  for (i in 1:nrow(IPC_COD_year_month)) {
-    year_i <- IPC_COD_year_month$Year[i]
-    month_i <- IPC_COD_year_month$Month[i]
-    year_month_i <- paste(year_i, month_i, sep="_")
-    prev_month <- ifelse(month_i > lagged_months, month_i - lagged_months, month_i + 12 - lagged_months)
-    prev_year <- ifelse(month_i > lagged_months, year_i, year_i - 1)
-    prev_months_index <- which(conflict_sub_COD_aggr$year == prev_year & conflict_sub_COD_aggr$month == prev_month)[1]
-    months_index_i <- rev(which(conflict_sub_COD_aggr$year == year_i & conflict_sub_COD_aggr$month == month_i))[1]
-    lagged_conflict[[year_month_i]] <- conflict_sub_COD_aggr[prev_months_index:months_index_i,] %>% 
-      select(-year_month, -month, -year) %>% 
-      group_by(Area, event_type, sub_event_type) %>% 
-      summarize(event_type = event_type[1],
-                n_events=sum(n_events),
-                fatalities=sum(fatalities)) %>% 
-      mutate(year_month = year_month_i,
-             year = year_i,
-             month = month_i)
-  }
-  
-  conflict_sub_COD_aggr <- lagged_conflict[[IPC_COD_year_month$year_month[1]]][1,]
-  for (tbl in lagged_conflict) {
-    conflict_sub_COD_aggr <- bind_rows(conflict_sub_COD_aggr, tbl)
-  }
-  conflict_sub_COD_aggr <- conflict_sub_COD_aggr[-1,]
-  
-  disaster_COD_monthly_aggr <- disaster_COD %>% 
-    filter(!(year == latest_year & month > latest_month)) %>% 
-    filter(!(year == oldest_year & month < oldest_month)) %>%  
-    group_by(Region, year, month) %>% 
-    summarise(n_disasters=n(),
-              affected=sum(`Total Affected`, na.rm=T),
-              deaths=sum(`Total Deaths`, na.rm=T),
-              n_floods=sum(`Disaster Type` == "Flood"),
-              n_droughts=sum(`Disaster Type` == "Drought")) %>% 
-    rename(Area=Region) %>% 
-    mutate(year_month = paste(year, month, sep="_")) %>% 
-    # mutate(year_month=as.Date(paste(month, year, "01"), format="%m %Y %d")) %>% 
-    arrange(year, month)
-  
-  disaster_COD_monthly_aggr <- disaster_COD_monthly_aggr[,-(2:3)] %>% 
-    complete(year_month = lapply(IPC_COD_year_month_list[1:(lagged_months+1)], function(x) x$year_month) %>% unlist) %>%
-    mutate(month = substr(year_month, 6, str_length(year_month)) %>% as.numeric,
-           year = substr(year_month, 1, 4) %>% as.numeric) %>% 
-    arrange(year, month)
-  disaster_COD_monthly_aggr[is.na(disaster_COD_monthly_aggr)] <- 0
-  
-  lagged_disaster <- list()
-  for (i in 1:nrow(IPC_COD_year_month)) {
-    year_i <- IPC_COD_year_month$Year[i]
-    month_i <- IPC_COD_year_month$Month[i]
-    year_month_i <- paste(year_i, month_i, sep="_")
-    prev_month <- ifelse(month_i > lagged_months, month_i - lagged_months, month_i + 12 - lagged_months)
-    prev_year <- ifelse(month_i > lagged_months, year_i, year_i - 1)
-    prev_months_index <- which(disaster_COD_monthly_aggr$year == prev_year & disaster_COD_monthly_aggr$month == prev_month)[1]
-    months_index_i <- rev(which(disaster_COD_monthly_aggr$year == year_i & disaster_COD_monthly_aggr$month == month_i))[1]
-    lagged_disaster[[year_month_i]] <- disaster_COD_monthly_aggr[prev_months_index:months_index_i,] %>% 
-      select(-year_month, -month, -year) %>% 
-      group_by(Area) %>% 
-      summarize(across(n_disasters:n_droughts, function(x) sum(x))) %>% 
-      mutate(year_month = year_month_i,
-             year = year_i,
-             month = month_i)
-  }
-  
-  disaster_COD_monthly_aggr <- lagged_disaster[[IPC_COD_year_month$year_month[1]]][1,]
-  for (tbl in lagged_disaster) {
-    disaster_COD_monthly_aggr <- bind_rows(disaster_COD_monthly_aggr, tbl)
-  }
-  disaster_COD_monthly_aggr <- disaster_COD_monthly_aggr[-1,]
-  
-  
-  disaster_COD_monthly_events <- disaster_COD_monthly_aggr %>% 
-    select(-year_month) %>% 
-    group_by(year, month, Area) %>% 
-    summarise(n_disasters=sum(n_disasters)) %>% 
-    pivot_wider(id_cols=Area, names_prefix = "n_disasters_", names_from = c(year, month), values_from = n_disasters)
-  disaster_COD_monthly_events[is.na(disaster_COD_monthly_events)] <- 0
-  
-  disaster_COD_monthly_flood <- disaster_COD_monthly_aggr %>% 
-    select(-year_month) %>% 
-    group_by(year, month, Area) %>% 
-    summarise(n_floods=sum(n_floods)) %>% 
-    pivot_wider(id_cols=Area, names_prefix = "n_floods_", names_from = c(year, month), values_from = n_floods)
-  disaster_COD_monthly_flood[is.na(disaster_COD_monthly_flood)] <- 0
-  
-  disaster_COD_monthly_drought <- disaster_COD_monthly_aggr %>% 
-    select(-year_month) %>% 
-    group_by(year, month, Area) %>% 
-    summarise(n_droughts=sum(n_droughts)) %>% 
-    pivot_wider(id_cols=Area, names_prefix = "n_droughts_", names_from = c(year, month), values_from = n_droughts)
-  disaster_COD_monthly_drought[is.na(disaster_COD_monthly_drought)] <- 0
-  
-  disaster_COD_monthly_affected <- disaster_COD_monthly_aggr %>%
-    select(-year_month) %>% 
-    group_by(year, month, Area) %>% 
-    summarise(log_affected=log(1+sum(affected, na.rm=T))) %>% 
-    pivot_wider(id_cols=Area, names_prefix = "affected_", names_from = c(year, month), values_from = log_affected)
-  disaster_COD_monthly_affected[is.na(disaster_COD_monthly_affected)] <- 0
-  
-  disaster_COD_monthly_deaths <- disaster_COD_monthly_aggr %>%
-    select(-year_month) %>% 
-    group_by(year, month, Area) %>% 
-    summarise(log_deaths=log(1+sum(deaths, na.rm=T))) %>% 
-    pivot_wider(id_cols=Area, names_prefix = "log_deaths_", names_from = c(year, month), values_from = log_deaths)
-  disaster_COD_monthly_deaths[is.na(disaster_COD_monthly_deaths)] <- 0
-  
-  
-  # regression data
-  IPC_ncol <- ncol(IPC_COD_provinces)
-  conflict_ncol <- ncol(conflict_COD_n_events) # 49
-  conflict_fatalities_ncol <- ncol(conflict_COD_fatalities) # 49
-  disaster_ncol <- ncol(disaster_COD_monthly_events) # 9
-  disaster_affected_ncol <- ncol(disaster_COD_monthly_affected) # 9
-  names(conflict_COD_n_events)[-1] <- paste0("c_n_events_", names(conflict_COD_n_events)[-1])
-  names(conflict_COD_fatalities)[-1] <- paste0("log_fatal_", names(conflict_COD_fatalities)[-1])
-  reg_data_i <- IPC_COD_provinces[,c(1, IPC_ncol:(IPC_ncol-2))] %>% 
-    left_join(conflict_COD_n_events[,c(1, conflict_ncol:(conflict_ncol-6+1))], by="Area") %>%
-    left_join(conflict_COD_fatalities[,c(1, conflict_ncol:(conflict_ncol-6+1))], by="Area") %>% 
-    left_join(disaster_COD_monthly_events[,c(1, disaster_ncol)], by="Area") %>% 
-    left_join(disaster_COD_monthly_flood[,c(1, disaster_ncol)], by="Area") %>% 
-    left_join(disaster_COD_monthly_drought[,c(1, disaster_ncol)], by="Area") %>% 
-    left_join(disaster_COD_monthly_affected[,c(1, disaster_ncol)], by="Area") %>%
-    left_join(disaster_COD_monthly_deaths[,c(1, disaster_ncol)], by="Area") %>% 
-    mutate(year = rev(IPC_COD_year_month$Year)[1])
-  names(reg_data_i) <- gsub(IPC_COD_year_month$year_month[IPC_ncol-1], "t", names(reg_data_i))
-  names(reg_data_i) <- gsub(IPC_COD_year_month$year_month[IPC_ncol-2], "t_1", names(reg_data_i))
-  names(reg_data_i) <- gsub(IPC_COD_year_month$year_month[IPC_ncol-3], "t_2", names(reg_data_i))
-  names(reg_data_i) <- gsub("[/ ]", "_", names(reg_data_i))
-  lagged_reg_data <- reg_data_i[,-1]
-  lagged_reg_data$month_diff <- as.numeric(as.Date(paste(IPC_COD_year_month$Year[14], IPC_COD_year_month$Month[14], 1), format="%Y %m %d") -
-                                             as.Date(paste(IPC_COD_year_month$Year[13], IPC_COD_year_month$Month[13], 1), format="%Y %m %d")) %/% 30
-  # lagged_reg_data$wheat_barley <- time_since_harvest(IPC_COD_year_month$Month[14], "wheat_barley", COD_harvest)
-  reg_data_names <- names(lagged_reg_data)
-  for (i in 1:min_t) {
-    IPC_col_index <- IPC_ncol - i
-    conflict_col_index <- conflict_ncol - 6*i
-    disaster_col_index <- disaster_ncol - i
-    reg_data_i <- IPC_COD_provinces[,c(1, IPC_col_index:(IPC_col_index-2))] %>% 
-      left_join(conflict_COD_n_events[,c(1, conflict_col_index:(conflict_col_index-6+1))], by="Area") %>%
-      left_join(conflict_COD_fatalities[,c(1, conflict_col_index:(conflict_col_index-6+1))], by="Area") %>% 
-      left_join(disaster_COD_monthly_events[,c(1, disaster_col_index)], by="Area") %>%
-      left_join(disaster_COD_monthly_flood[,c(1, disaster_col_index)], by="Area") %>% 
-      left_join(disaster_COD_monthly_drought[,c(1, disaster_col_index)], by="Area") %>% 
-      left_join(disaster_COD_monthly_affected[,c(1, disaster_col_index)], by="Area") %>% 
-      left_join(disaster_COD_monthly_deaths[,c(1, disaster_col_index)], by="Area") %>% 
-      mutate(year = rev(IPC_COD_year_month$Year)[IPC_col_index])
-    reg_data_i$month_diff <- as.numeric(as.Date(paste(IPC_COD_year_month$Year[14-i], IPC_COD_year_month$Month[14-i], 1), format="%Y %m %d") -
-                                          as.Date(paste(IPC_COD_year_month$Year[13-i], IPC_COD_year_month$Month[13-i], 1), format="%Y %m %d")) %/% 30
-    
-    # reg_data_i$wheat_barley <- time_since_harvest(IPC_COD_year_month$Month[14-i], "wheat_barley", COD_harvest)
-    reg_data_i <- as.matrix(reg_data_i[,-1])
-    colnames(reg_data_i) <- reg_data_names
-    lagged_reg_data <- bind_rows(lagged_reg_data, reg_data_i %>% as_tibble)
-  }
-  lagged_reg_data[is.na(lagged_reg_data)] <- 0
-  
-  result <- list()
-  result$lagged_reg_data <- lagged_reg_data
-  result$conflict_COD_aggr <- conflict_COD_aggr
-  result$conflict_sub_COD_aggr <- conflict_sub_COD_aggr
-  result$disaster_COD_monthly_aggr <- disaster_COD_monthly_aggr
-  return(result)
-} # function end
+n_t <- nrow(IPC_COD_year_month)
+oldest_year <- IPC_COD_year_month$Year[1]-1; oldest_month <- IPC_COD_year_month$Month[1] # year - 1 to gen t-12 at most
+latest_year <- IPC_COD_year_month$Year[n_t]; latest_month <- IPC_COD_year_month$Month[n_t]
+
+disaster_COD %>% 
+  filter(year > oldest_year - 1) %>% 
+  filter(!(year == latest_year & month > latest_month)) %>% 
+  filter(!(year == oldest_year & month < oldest_month)) %>% 
+  pull(`Disaster Type`) %>% table %>% as_tibble %>% rename(disaster=".")
+
+conflict_NAT <- conflict_COD
+disaster_NAT <- disaster_COD
+IPC_NAT_provinces <- IPC_COD_provinces
+IPC_NAT_provinces_long <- IPC_COD_provinces_long
+IPC_NAT_year_month <- IPC_COD_year_month
+IPC_NAT_year_month_list <- IPC_COD_year_month_list
+crop_seasons <- corn_seasons
+no_crop_areas <- no_crop_areas_COD
 
 n_t <- nrow(IPC_COD_year_month)
 oldest_year <- IPC_COD_year_month$Year[1]-1; oldest_month <- IPC_COD_year_month$Month[1] # year - 1 to gen t-12 at most
@@ -401,11 +199,6 @@ for (i in 1:5) {
 lm(`Phase_3+ratio_t`~., data=lagged_reg_data_list$months_2$lagged_reg_data %>% select(-n_floods_t, -n_droughts_t)) %>% summary()
 lm(`Phase_3+ratio_t`~., data=lagged_reg_data_list$months_2$lagged_reg_data %>% select(-n_disasters_t)) %>% summary()
 
-COD_harvest
-corn_seasons <- tibble(month=1:12,
-                       season=c("none", rep("plant", 2), rep("grow", 2), rep("harvest", 2), rep("none", 2), rep("plant", 3), "none"))
-rice_seasons <- tibble(month=1:12,
-                       season=c(rep("grow", 4), rep("harvest", 3), rep("none", 2), rep("plant", 3)))
 
 IPC_COD_phase3_long <- IPC_COD_provinces_long %>% 
   mutate(year = as.character(Year) %>% as.numeric,

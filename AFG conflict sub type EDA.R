@@ -154,6 +154,10 @@ library(psych)
   AFG_wheat_barley <- 5:7
   AFG_corn_rice <- 8:10
   
+  crop_seasons_Afg <- tibble(month=1:12,
+                             season=c(rep("grow", 4), rep("harvest", 3), rep("none", 2), rep("plant", 3)))
+  no_crop_areas_Afg <- c("Ghor", "Nimruz", "Nuristan", "Panjshir")
+  
   time_since_harvest <- function(month., crop, country_harvest_season) {
     if (crop == "wheat_barley") {
       result <- ifelse(month. > country_harvest_season$wheat_barley[3], month. - country_harvest_season$wheat_barley[3],
@@ -168,8 +172,27 @@ library(psych)
   AFG_harvest <- list(wheat_barley=AFG_wheat_barley,
                       corn_rice=AFG_corn_rice)
   
-  conflict_types <- conflict_Afg %>% select(event_type, sub_event_type) %>% unique %>% arrange(event_type, sub_event_type) %>% print(n=24)
+  conflict_types <- conflict_Afg %>% select(event_type, sub_event_type) %>% unique %>% arrange(event_type, sub_event_type)
 }
+
+n_t <- nrow(IPC_Afg_year_month)
+oldest_year <- IPC_Afg_year_month$Year[1]-1; oldest_month <- IPC_Afg_year_month$Month[1] # year - 1 to gen t-12 at most
+latest_year <- IPC_Afg_year_month$Year[n_t]; latest_month <- IPC_Afg_year_month$Month[n_t]
+
+disaster_Afg %>% 
+  filter(year > oldest_year - 1) %>% 
+  filter(!(year == latest_year & month > latest_month)) %>% 
+  filter(!(year == oldest_year & month < oldest_month)) %>% 
+  pull(`Disaster Type`) %>% table %>% as_tibble %>% rename(disaster=".")
+
+conflict_NAT <- conflict_Afg
+disaster_NAT <- disaster_Afg
+IPC_NAT_provinces <- IPC_Afg_provinces
+IPC_NAT_provinces_long <- IPC_Afg_provinces_long
+IPC_NAT_year_month <- IPC_Afg_year_month
+IPC_NAT_year_month_list <- IPC_Afg_year_month_list
+crop_seasons <- crop_seasons_Afg
+no_crop_areas <- no_crop_areas_Afg
 
 conflict_Afg %>% arrange(year, month) # the oldest date is 2017-01-31
 
@@ -424,11 +447,6 @@ for (i in 1:4) {
   lagged_reg_data_list[[paste0("months_", i)]] <- lagged_data_by_m(m, 9) # min_t = 9
 }
 
-# https://ipad.fas.usda.gov/countrysummary/Default.aspx?id=AF
-# plant: 10~12, growing: 1~4, harvest: 5~7
-crop_seasons <- tibble(month=1:12,
-                       season=c(rep("grow", 4), rep("harvest", 3), rep("none", 2), rep("plant", 3)))
-no_crop_areas <- c("Ghor", "Nimruz", "Nuristan", "Panjshir")
 
 IPC_Afg_phase3_long <- IPC_Afg_provinces_long %>% 
   mutate(year = as.character(Year) %>% as.numeric,
