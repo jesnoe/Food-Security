@@ -114,10 +114,8 @@ library(psych)
     return(result)
   }
   SDN_harvest <- list(sorghum=SDN_sorghum)
-  
-  conflict_types <- conflict_SDN %>% select(event_type, sub_event_type) %>% unique %>% arrange(event_type, sub_event_type)
 }
-
+{
 n_t <- nrow(IPC_SDN_year_month)
 oldest_year <- IPC_SDN_year_month$Year[1]-1; oldest_month <- IPC_SDN_year_month$Month[1] # year - 1 to gen t-12 at most
 latest_year <- IPC_SDN_year_month$Year[n_t]; latest_month <- IPC_SDN_year_month$Month[n_t]
@@ -136,6 +134,109 @@ IPC_NAT_year_month <- IPC_SDN_year_month
 IPC_NAT_year_month_list <- IPC_SDN_year_month_list
 crop_seasons <- crop_seasons_SDN
 no_crop_areas <- no_crop_areas_SDN
+conflict_types <- conflict_SDN %>% select(event_type, sub_event_type) %>% unique %>% arrange(event_type, sub_event_type)
+}
+
+load("Food Security/lagged_reg_data_list_SDN.RData")
+
+month_lag_ <- 4
+# IPC vs. conflict
+lagged_reg_data_list_SDN[[month_lag_]]$lagged_reg_data %>% 
+  ggplot(aes(x=c_n_events_Battles_explosions_t, y=`Phase_3+ratio_t`)) +
+  geom_point()
+lagged_reg_data_list_SDN[[month_lag_]]$lagged_reg_data %>% 
+  ggplot(aes(x=c_n_events_Protests_Riots_t, y=`Phase_3+ratio_t`)) +
+  geom_point()
+lagged_reg_data_list_SDN[[month_lag_]]$lagged_reg_data %>% 
+  ggplot(aes(x=c_n_events_etc._t, y=`Phase_3+ratio_t`)) +
+  geom_point()
+
+# IPC_diff vs. conflict
+lagged_reg_data_list_SDN[[month_lag_]]$lagged_reg_data %>% 
+  ggplot(aes(x=c_n_events_Battles_explosions_t, y=IPC_diff)) +
+  geom_point()
+
+lagged_reg_data_list_SDN[[month_lag_]]$lagged_reg_data %>% 
+  ggplot(aes(x=c_n_events_Protests_Riots_t, y=IPC_diff)) +
+  geom_point()
+
+lagged_reg_data_list_SDN[[month_lag_]]$lagged_reg_data %>% 
+  ggplot(aes(x=c_n_events_etc._t, y=IPC_diff)) +
+  geom_point()
+
+# IPC vs. conflict_diff
+lagged_reg_data_list_SDN[[month_lag_]]$lagged_reg_data %>% 
+  ggplot(aes(x=c_n_events_Battles_explosions_t_diff, y=`Phase_3+ratio_t`)) +
+  geom_point()
+lagged_reg_data_list_SDN[[month_lag_]]$lagged_reg_data %>% 
+  ggplot(aes(x=c_n_events_Protests_Riots_t_diff, y=`Phase_3+ratio_t`)) +
+  geom_point()
+lagged_reg_data_list_SDN[[month_lag_]]$lagged_reg_data %>% 
+  ggplot(aes(x=c_n_events_etc._t_diff, y=`Phase_3+ratio_t`)) +
+  geom_point()
+
+# IPC_diff vs. conflict_diff
+lagged_reg_data_list_SDN[[month_lag_]]$lagged_reg_data %>% 
+  ggplot(aes(x=c_n_events_Battles_explosions_t_diff, y=IPC_diff)) +
+  geom_point()
+lagged_reg_data_list_SDN[[month_lag_]]$lagged_reg_data %>% 
+  ggplot(aes(x=c_n_events_Protests_Riots_t_diff, y=IPC_diff)) +
+  geom_point()
+lagged_reg_data_list_SDN[[month_lag_]]$lagged_reg_data %>% 
+  ggplot(aes(x=c_n_events_etc._t_diff, y=IPC_diff)) +
+  geom_point()
+
+lagged_months <- 1
+disaster1 <- "Flood"; disaster2 <- "Epidemic"
+disaster_SDN_monthly_aggr_by_type <- disaster_SDN %>% 
+  filter(year > oldest_year - 1) %>% 
+  filter(!(year == latest_year & month > latest_month)) %>% 
+  filter(!(year == oldest_year & month < oldest_month)) %>%  
+  group_by(year, month, `Disaster Type`) %>% 
+  summarise(n_disasters=n(),
+            affected=sum(`Total Affected`, na.rm=T),
+            deaths=sum(`Total Deaths`, na.rm=T)) %>% 
+  rename(type=`Disaster Type`) %>% 
+  mutate(year_month = paste(year, month, sep="_")) %>% 
+  mutate(year=as.Date(paste(month, year, "01"), format="%m %Y %d")) %>%
+  arrange(year, month)
+
+disaster_SDN_monthly_aggr_by_type %>% 
+  ggplot() +
+  geom_line(aes(x=year, y=affected, group=type, color=type))
+
+disaster_SDN_monthly_aggr_by_type %>% 
+  ggplot() +
+  geom_line(aes(x=year, y=deaths, group=type, color=type))
+
+disaster_SDN_monthly_aggr_by_type %>% 
+  ggplot() +
+  geom_line(aes(x=year, y=n_disasters, group=type, color=type))
+
+disaster_SDN_monthly_aggr_by_Area <- disaster_SDN %>% 
+  filter(year > oldest_year - 1) %>% 
+  filter(!(year == latest_year & month > latest_month)) %>% 
+  filter(!(year == oldest_year & month < oldest_month)) %>%  
+  group_by(Region, year, month) %>%
+  summarise(n_disasters=n(),
+            affected=sum(`Total Affected`, na.rm=T),
+            deaths=sum(`Total Deaths`, na.rm=T)) %>% 
+  rename(Area=Region) %>%
+  mutate(year_month = paste(year, month, sep="_")) %>% 
+  mutate(year=as.Date(paste(month, year, "01"), format="%m %Y %d")) %>%
+  arrange(year, month)
+
+disaster_SDN_monthly_aggr_by_Area %>% 
+  ggplot() +
+  geom_line(aes(x=year, y=affected, group=Area, color=Area))
+
+disaster_SDN_monthly_aggr_by_Area %>% 
+  ggplot() +
+  geom_line(aes(x=year, y=deaths, group=Area, color=Area))
+
+disaster_SDN_monthly_aggr_by_Area %>% 
+  ggplot() +
+  geom_line(aes(x=year, y=n_disasters, group=Area, color=Area))
 
 lagged_data_by_m <- function(lagged_months, min_t) {
   conflict_SDN_aggr <- conflict_SDN %>% 

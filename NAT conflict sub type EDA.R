@@ -228,7 +228,8 @@ lagged_data_by_m <- function(lagged_months, min_t, disaster1="Flood", disaster2=
     left_join(disaster_NAT_monthly_disaster2[,c(1, disaster_ncol)], by="Area") %>% 
     left_join(disaster_NAT_monthly_affected[,c(1, disaster_ncol)], by="Area") %>%
     left_join(disaster_NAT_monthly_deaths[,c(1, disaster_ncol)], by="Area") %>% 
-    mutate(year = rev(IPC_NAT_year_month$Year)[1])
+    mutate(year = rev(IPC_NAT_year_month$Year)[1],
+           month = rev(IPC_NAT_year_month$Month)[1])
   names(reg_data_i) <- gsub(IPC_NAT_year_month$year_month[IPC_ncol-1], "t", names(reg_data_i))
   names(reg_data_i) <- gsub(IPC_NAT_year_month$year_month[IPC_ncol-2], "t_1", names(reg_data_i))
   names(reg_data_i) <- gsub(IPC_NAT_year_month$year_month[IPC_ncol-3], "t_2", names(reg_data_i))
@@ -236,6 +237,7 @@ lagged_data_by_m <- function(lagged_months, min_t, disaster1="Flood", disaster2=
   lagged_reg_data <- reg_data_i[,-1]
   lagged_reg_data$month_diff <- as.numeric(as.Date(paste(IPC_NAT_year_month$Year[IPC_n_months], IPC_NAT_year_month$Month[IPC_n_months], 1), format="%Y %m %d") -
                                              as.Date(paste(IPC_NAT_year_month$Year[IPC_n_months-1], IPC_NAT_year_month$Month[IPC_n_months-1], 1), format="%Y %m %d")) %/% 30
+  n_areas <- nrow(reg_data_i)
   # lagged_reg_data$wheat_barley <- time_since_harvest(IPC_NAT_year_month$Month[14], "wheat_barley", NAT_harvest)
   reg_data_names <- names(lagged_reg_data)
   for (i in 1:min_t) {
@@ -250,7 +252,8 @@ lagged_data_by_m <- function(lagged_months, min_t, disaster1="Flood", disaster2=
       left_join(disaster_NAT_monthly_disaster2[,c(1, disaster_col_index)], by="Area") %>% 
       left_join(disaster_NAT_monthly_affected[,c(1, disaster_col_index)], by="Area") %>% 
       left_join(disaster_NAT_monthly_deaths[,c(1, disaster_col_index)], by="Area") %>% 
-      mutate(year = rev(IPC_NAT_year_month$Year)[IPC_col_index])
+      mutate(year = rev(IPC_NAT_year_month$Year)[IPC_col_index],
+             month = rev(IPC_NAT_year_month$Month)[IPC_col_index])
     reg_data_i$month_diff <- as.numeric(as.Date(paste(IPC_NAT_year_month$Year[IPC_n_months-i], IPC_NAT_year_month$Month[IPC_n_months-i], 1), format="%Y %m %d") -
                                           as.Date(paste(IPC_NAT_year_month$Year[IPC_n_months-1-i], IPC_NAT_year_month$Month[IPC_n_months-1-i], 1), format="%Y %m %d")) %/% 30
     
@@ -260,6 +263,14 @@ lagged_data_by_m <- function(lagged_months, min_t, disaster1="Flood", disaster2=
     lagged_reg_data <- bind_rows(lagged_reg_data, reg_data_i %>% as_tibble)
   }
   lagged_reg_data[is.na(lagged_reg_data)] <- 0
+  lagged_reg_data$IPC_diff <- lagged_reg_data$`Phase_3+ratio_t` - lagged_reg_data$`Phase_3+ratio_t_1`
+  
+  n_rows <- nrow(lagged_reg_data)
+  reg_data_first_month <- matrix(NA, n_areas, 6) %>% as_tibble
+  names(reg_data_first_month) <- reg_data_names[4:9]
+  conflict_t_1 <- bind_rows(reg_data_first_month, lagged_reg_data[(n_areas+1):n_rows, 4:9] - lagged_reg_data[1:(n_rows - n_areas), 4:9] %>% as.matrix)
+  names(conflict_t_1) <- paste0(reg_data_names[4:9], "_diff")
+  lagged_reg_data <- bind_cols(lagged_reg_data, conflict_t_1)
   
   
   result$lagged_reg_data <- lagged_reg_data
@@ -517,8 +528,63 @@ for (i in 1:month_lag) {
 }
 
 # lagged_reg_data_list_AFG <- lagged_reg_data_list
+# save("lagged_reg_data_list_AFG", file="Food Security/lagged_reg_data_list_AFG.RData")
 # lagged_reg_data_list_SDN <- lagged_reg_data_list
+# save("lagged_reg_data_list_SDN", file="Food Security/lagged_reg_data_list_SDN.RData")
 # lagged_reg_data_list_COD <- lagged_reg_data_list
+# save("lagged_reg_data_list_COD", file="Food Security/lagged_reg_data_list_COD.RData")
+
+load("Food Security/lagged_reg_data_list_AFG.RData")
+load("Food Security/lagged_reg_data_list_SDN.RData")
+load("Food Security/lagged_reg_data_list_COD.RData")
+
+month_lag_ <- 4
+# IPC vs. conflict
+lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>% 
+  ggplot(aes(x=c_n_events_Battles_explosions_t, y=`Phase_3+ratio_t`)) +
+  geom_point()
+lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>% 
+  ggplot(aes(x=c_n_events_Protests_Riots_t, y=`Phase_3+ratio_t`)) +
+  geom_point()
+lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>% 
+  ggplot(aes(x=c_n_events_etc._t, y=`Phase_3+ratio_t`)) +
+  geom_point()
+
+# IPC_diff vs. conflict
+lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>% 
+  ggplot(aes(x=c_n_events_Battles_explosions_t, y=IPC_diff)) +
+  geom_point()
+
+lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>% 
+  ggplot(aes(x=c_n_events_Protests_Riots_t, y=IPC_diff)) +
+  geom_point()
+
+lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>% 
+  ggplot(aes(x=c_n_events_etc._t, y=IPC_diff)) +
+  geom_point()
+
+# IPC vs. conflict_diff
+lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>% 
+  ggplot(aes(x=c_n_events_Battles_explosions_t_diff, y=`Phase_3+ratio_t`)) +
+  geom_point()
+lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>% 
+  ggplot(aes(x=c_n_events_Protests_Riots_t_diff, y=`Phase_3+ratio_t`)) +
+  geom_point()
+lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>% 
+  ggplot(aes(x=c_n_events_etc._t_diff, y=`Phase_3+ratio_t`)) +
+  geom_point()
+
+# IPC_diff vs. conflict_diff
+lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>% 
+  ggplot(aes(x=c_n_events_Battles_explosions_t_diff, y=IPC_diff)) +
+  geom_point()
+lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>% 
+  ggplot(aes(x=c_n_events_Protests_Riots_t_diff, y=IPC_diff)) +
+  geom_point()
+lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>% 
+  ggplot(aes(x=c_n_events_etc._t_diff, y=IPC_diff)) +
+  geom_point()
+
 lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>% summary
 lagged_reg_data_list_SDN[[month_lag_]]$lagged_reg_data %>% summary
 lagged_reg_data_list_COD[[month_lag_]]$lagged_reg_data %>% summary
@@ -526,6 +592,9 @@ lagged_reg_data_list_COD[[month_lag_]]$lagged_reg_data %>% summary
 lagged_reg_data_list_AFG[[month_lag_]]$disaster_NAT_monthly_aggr %>% summary
 lagged_reg_data_list_SDN[[month_lag_]]$disaster_NAT_monthly_aggr %>% summary
 lagged_reg_data_list_COD[[month_lag_]]$disaster_NAT_monthly_aggr %>% summary
+
+
+lagged_reg_data_list_AFG$months_1
 
 disaster_Afg %>% 
   filter(year > 2016 - 1) %>% 
@@ -566,22 +635,86 @@ disaster_COD %>%
 IPC_COD_year_month
 
 
-month_lag_ <- 4
 
-lm(`Phase_3+ratio_t`~., data=lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>% select(-n_disaster1_t, -n_disaster2_t) %>% mutate(year = as.factor(year))) %>% summary()
-lm(`Phase_3+ratio_t`~., data=lagged_reg_data_list_SDN[[month_lag_]]$lagged_reg_data %>% select(-n_disaster1_t, -n_disaster2_t) %>% mutate(year = as.factor(year))) %>% summary()
-lm(`Phase_3+ratio_t`~., data=lagged_reg_data_list_COD[[month_lag_]]$lagged_reg_data %>% select(-n_disaster1_t, -n_disaster2_t) %>% mutate(year = as.factor(year))) %>% summary()
+# lm(`Phase_3+ratio_t`~., data=lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>% select(-n_disaster1_t, -n_disaster2_t) %>% mutate(year = as.factor(year))) %>% summary()
+# lm(`Phase_3+ratio_t`~., data=lagged_reg_data_list_SDN[[month_lag_]]$lagged_reg_data %>% select(-n_disaster1_t, -n_disaster2_t) %>% mutate(year = as.factor(year))) %>% summary()
+# lm(`Phase_3+ratio_t`~., data=lagged_reg_data_list_COD[[month_lag_]]$lagged_reg_data %>% select(-n_disaster1_t, -n_disaster2_t) %>% mutate(year = as.factor(year))) %>% summary()
 
-lm(`Phase_3+ratio_t`~., data=lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>% select(-n_disaster1_t, -n_disaster2_t, -year)) %>% summary()
-lm(`Phase_3+ratio_t`~., data=lagged_reg_data_list_SDN[[month_lag_]]$lagged_reg_data %>% select(-n_disaster1_t, -n_disaster2_t, -year)) %>% summary()
-lm(`Phase_3+ratio_t`~., data=lagged_reg_data_list_COD[[month_lag_]]$lagged_reg_data %>% select(-n_disaster1_t, -n_disaster2_t, -year)) %>% summary()
+reg_result_AFG <- lm(`Phase_3+ratio_t`~.-IPC_diff-year-month, data=lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>%
+                       select(-(c_n_events_etc._t_diff:log_fatal_Battles_explosions_t_diff), -n_disaster1_t, -n_disaster2_t))
+reg_result_SDN <- lm(`Phase_3+ratio_t`~.-IPC_diff-year-month, data=lagged_reg_data_list_SDN[[month_lag_]]$lagged_reg_data %>% 
+                       select(-(c_n_events_etc._t_diff:log_fatal_Battles_explosions_t_diff), -n_disaster1_t, -n_disaster2_t))
+reg_result_COD <- lm(`Phase_3+ratio_t`~.-IPC_diff-year-month, data=lagged_reg_data_list_COD[[month_lag_]]$lagged_reg_data %>% 
+                       select(-(c_n_events_etc._t_diff:log_fatal_Battles_explosions_t_diff), -n_disaster1_t, -n_disaster2_t))
 
-lm(`Phase_3+ratio_t`~., data=lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>% select(-n_disasters_t, -affected_t, -log_deaths_t, -month_diff) %>% 
-     mutate(year = as.factor(year))) %>% summary()
-lm(`Phase_3+ratio_t`~., data=lagged_reg_data_list_SDN[[month_lag_]]$lagged_reg_data %>% select(-n_disasters_t, -affected_t, -log_deaths_t, -month_diff) %>% 
-     mutate(year = as.factor(year))) %>% summary()
-lm(`Phase_3+ratio_t`~., data=lagged_reg_data_list_COD[[month_lag_]]$lagged_reg_data %>% select(-n_disasters_t, -affected_t, -log_deaths_t, -month_diff) %>% 
-     mutate(year = as.factor(year))) %>% summary()
+reg_result_AFG_conflict_diff <- lm(`Phase_3+ratio_t`~.-IPC_diff-year-month, data=lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>%
+                       select(-(c_n_events_etc._t:log_fatal_Battles_explosions_t), -n_disaster1_t, -n_disaster2_t))
+reg_result_SDN_conflict_diff <- lm(`Phase_3+ratio_t`~.-IPC_diff-year-month, data=lagged_reg_data_list_SDN[[month_lag_]]$lagged_reg_data %>% 
+                       select(-(c_n_events_etc._t:log_fatal_Battles_explosions_t), -n_disaster1_t, -n_disaster2_t))
+reg_result_COD_conflict_diff <- lm(`Phase_3+ratio_t`~.-IPC_diff-year-month, data=lagged_reg_data_list_COD[[month_lag_]]$lagged_reg_data %>% 
+                       select(-(c_n_events_etc._t:log_fatal_Battles_explosions_t), -n_disaster1_t, -n_disaster2_t))
+
+reg_result_AFG_all_diff <- lm(IPC_diff~.-year-month, data=lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data[,-(1:3)] %>%
+                                     select(-(c_n_events_etc._t:log_fatal_Battles_explosions_t), -n_disaster1_t, -n_disaster2_t))
+reg_result_SDN_all_diff <- lm(IPC_diff~.-year-month, data=lagged_reg_data_list_SDN[[month_lag_]]$lagged_reg_data[,-(1:3)] %>% 
+                                     select(-(c_n_events_etc._t:log_fatal_Battles_explosions_t), -n_disaster1_t, -n_disaster2_t))
+reg_result_COD_all_diff <- lm(IPC_diff~.-year-month, data=lagged_reg_data_list_COD[[month_lag_]]$lagged_reg_data[,-(1:3)] %>% 
+                                     select(-(c_n_events_etc._t:log_fatal_Battles_explosions_t), -n_disaster1_t, -n_disaster2_t))
+
+reg_result_AFG %>% summary()
+reg_result_SDN %>% summary()
+reg_result_COD %>% summary()
+
+reg_result_AFG_conflict_diff %>% summary()
+reg_result_SDN_conflict_diff %>% summary()
+reg_result_COD_conflict_diff %>% summary()
+
+reg_result_AFG_all_diff %>% summary()
+reg_result_SDN_all_diff %>% summary()
+reg_result_COD_all_diff %>% summary()
+
+reg_result_AFG$model %>%
+  mutate(residual=reg_result_AFG$residuals,
+         year = as.Date(paste(year, month, "01"), format="%Y %m %d")) %>% 
+  ggplot() + ggtitle("AFG residuals by months with n_disasters and death") +
+  geom_point(aes(x=year, y=residual))
+reg_result_SDN$model %>%
+  mutate(residual=reg_result_SDN$residuals,
+         year = as.Date(paste(year, month, "01"), format="%Y %m %d")) %>% 
+  ggplot() + ggtitle("SDN residuals by months with n_disasters and death") +
+  geom_point(aes(x=year, y=residual))
+reg_result_COD$model %>%
+  mutate(residual=reg_result_COD$residuals,
+         year = as.Date(paste(year, month, "01"), format="%Y %m %d")) %>%  
+  ggplot() + ggtitle("COD residuals by months with n_disasters and death") +
+  geom_point(aes(x=year, y=residual))
+
+
+reg_result_AFG <- lm(`Phase_3+ratio_t`~.-year-month, data=lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>% select(-n_disasters_t, -affected_t, -log_deaths_t))
+reg_result_SDN <- lm(`Phase_3+ratio_t`~.-year-month, data=lagged_reg_data_list_SDN[[month_lag_]]$lagged_reg_data %>% select(-n_disasters_t, -affected_t, -log_deaths_t))
+reg_result_COD <- lm(`Phase_3+ratio_t`~.-year-month, data=lagged_reg_data_list_COD[[month_lag_]]$lagged_reg_data %>% select(-n_disasters_t, -affected_t, -log_deaths_t))
+
+reg_result_AFG %>% summary()
+reg_result_SDN %>% summary()
+reg_result_COD %>% summary()
+
+reg_result_AFG$model %>%
+  mutate(residual=reg_result_AFG$residuals,
+         year = as.Date(paste(year, month, "01"), format="%Y %m %d")) %>% 
+  ggplot() + ggtitle("AFG residuals by months with disaster 1 & 2") +
+  geom_point(aes(x=year, y=residual))
+reg_result_SDN$model %>%
+  mutate(residual=reg_result_SDN$residuals,
+         year = as.Date(paste(year, month, "01"), format="%Y %m %d")) %>% 
+  ggplot() + ggtitle("SDN residuals by months with disaster 1 & 2") +
+  geom_point(aes(x=year, y=residual))
+reg_result_COD$model %>%
+  mutate(residual=reg_result_COD$residuals,
+         year = as.Date(paste(year, month, "01"), format="%Y %m %d")) %>%  
+  ggplot() + ggtitle("COD residuals by months with disaster 1 & 2") +
+  geom_point(aes(x=year, y=residual))
+
+
 
 lagged_reg_data_list_SDN[[month_lag_]]$lagged_reg_data$n_disaster1_t
 lagged_reg_data_list_SDN[[month_lag_]]$lagged_reg_data$n_disaster2_t
@@ -598,7 +731,7 @@ IPC_NAT_phase3_long <- IPC_NAT_provinces_long %>%
          month = as.character(Month) %>% as.numeric) %>% 
   ungroup(Year) %>% 
   select(Area, year, month, Phase_3above_ratio) %>% 
-  mutate(IPC_diff = Phase_3above_ratio - lag(Phase_3above_ratio),) %>% 
+  mutate(IPC_diff = Phase_3above_ratio - lag(Phase_3above_ratio)) %>% 
   left_join(crop_seasons, by="month")
 
 # For COD
@@ -607,7 +740,7 @@ IPC_NAT_phase3_long <- IPC_NAT_provinces_long %>%
          month = as.character(Month) %>% as.numeric) %>% 
   ungroup(Year) %>% 
   select(Area, year, month, Phase_3above_ratio) %>% 
-  mutate(IPC_diff = Phase_3above_ratio - lag(Phase_3above_ratio),) %>% 
+  mutate(IPC_diff = Phase_3above_ratio - lag(Phase_3above_ratio)) %>% 
   left_join(crop_seasons, by="month") %>% 
   mutate(season = ifelse(Area == "Haut Katanga", season_south, season))
 
