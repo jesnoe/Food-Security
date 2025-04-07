@@ -134,7 +134,7 @@ for (i in 1:nrow(IPC_SDN_year_month)) {
   year_i <- IPC_SDN_year_month$Year[i] %>% as.character %>% as.numeric
   month_i <- IPC_SDN_year_month$Month[i] %>% as.character %>% as.numeric
   
-  ICP_map_i <- SDN_map %>% left_join(IPC_SDN %>% filter(Year == year_i & Month == month_i) %>% select(Subarea, Phase_3above_ratio) %>% rename(shapeName=Subarea),
+  IPC_map_i <- SDN_map %>% left_join(IPC_SDN %>% filter(Year == year_i & Month == month_i) %>% select(Subarea, Phase_3above_ratio) %>% rename(shapeName=Subarea),
                                      by="shapeName") %>% 
     ggplot() + geom_sf(aes(fill=Phase_3above_ratio)) +
     scale_fill_viridis_c(limits=c(0,1)) +
@@ -144,6 +144,6 @@ for (i in 1:nrow(IPC_SDN_year_month)) {
           panel.border = element_blank(),
           axis.text = element_blank(),
           line = element_blank())
-  ggsave(paste0("Food Security/Figs/maps/SDN IPC ", year_i, " ", month_i, ".png"), ICP_map_i, scale=1)
+  ggsave(paste0("Food Security/Figs/maps/SDN IPC ", year_i, " ", month_i, ".png"), IPC_map_i, scale=1)
   year_prev <- year_i
 }

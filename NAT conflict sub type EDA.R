@@ -539,51 +539,6 @@ load("Food Security/lagged_reg_data_list_SDN.RData")
 load("Food Security/lagged_reg_data_list_COD.RData")
 
 month_lag_ <- 4
-# IPC vs. conflict
-lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>% 
-  ggplot(aes(x=c_n_events_Battles_explosions_t, y=`Phase_3+ratio_t`)) +
-  geom_point()
-lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>% 
-  ggplot(aes(x=c_n_events_Protests_Riots_t, y=`Phase_3+ratio_t`)) +
-  geom_point()
-lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>% 
-  ggplot(aes(x=c_n_events_etc._t, y=`Phase_3+ratio_t`)) +
-  geom_point()
-
-# IPC_diff vs. conflict
-lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>% 
-  ggplot(aes(x=c_n_events_Battles_explosions_t, y=IPC_diff)) +
-  geom_point()
-
-lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>% 
-  ggplot(aes(x=c_n_events_Protests_Riots_t, y=IPC_diff)) +
-  geom_point()
-
-lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>% 
-  ggplot(aes(x=c_n_events_etc._t, y=IPC_diff)) +
-  geom_point()
-
-# IPC vs. conflict_diff
-lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>% 
-  ggplot(aes(x=c_n_events_Battles_explosions_t_diff, y=`Phase_3+ratio_t`)) +
-  geom_point()
-lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>% 
-  ggplot(aes(x=c_n_events_Protests_Riots_t_diff, y=`Phase_3+ratio_t`)) +
-  geom_point()
-lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>% 
-  ggplot(aes(x=c_n_events_etc._t_diff, y=`Phase_3+ratio_t`)) +
-  geom_point()
-
-# IPC_diff vs. conflict_diff
-lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>% 
-  ggplot(aes(x=c_n_events_Battles_explosions_t_diff, y=IPC_diff)) +
-  geom_point()
-lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>% 
-  ggplot(aes(x=c_n_events_Protests_Riots_t_diff, y=IPC_diff)) +
-  geom_point()
-lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>% 
-  ggplot(aes(x=c_n_events_etc._t_diff, y=IPC_diff)) +
-  geom_point()
 
 lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>% summary
 lagged_reg_data_list_SDN[[month_lag_]]$lagged_reg_data %>% summary

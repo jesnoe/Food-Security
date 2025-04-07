@@ -12,11 +12,14 @@ library(sp)
 library(reshape2)
 library(glmnet)
 library(psych)
+library(SPEI)
 
 {
-  afg_map <- read_sf("Food Security/geoBoundaries-AFG-ADM1.geojson")
-  afg_map$shapeName[which(afg_map$shapeName == "Ghanzi")] <- "Ghazni"
-  afg_map$shapeName[which(afg_map$shapeName == "Sar-e Pol")] <- "Sar_e_Pol"
+  AFG_map <- read_sf("Food Security/geoBoundaries-AFG-ADM1.geojson")
+  AFG_map$shapeName[which(AFG_map$shapeName == "Ghanzi")] <- "Ghazni"
+  AFG_map$shapeName[which(AFG_map$shapeName == "Sar-e Pol")] <- "Sar_e_Pol"
+  
+  # https://data.humdata.org/dataset/afg-rainfall-subnational
   afg_adm_codes <- read_xlsx(("Food Security/AFG adm2 boundaries.xlsx")) %>% select(ADM1_EN, ADM1_PCODE) %>% unique %>% arrange(ADM1_EN)
   afg_adm_codes$ADM1_EN[which(afg_adm_codes$ADM1_EN == "Hilmand")] <- "Helmand"
   afg_adm_codes$ADM1_EN[which(afg_adm_codes$ADM1_EN == "Hirat")] <- "Herat"
@@ -77,7 +80,7 @@ library(psych)
     mutate(across(Area:Subarea, function(x) gsub(" Urban", "", x)))
   
   IPC_AFG <- IPC_AFG %>% 
-    mutate(Area = ifelse(is.na(Area) & Subarea %in% afg_map$shapeName, Subarea, Area))
+    mutate(Area = ifelse(is.na(Area) & Subarea %in% AFG_map$shapeName, Subarea, Area))
   IPC_AFG_provinces_long <- IPC_AFG %>%
     group_by(Area, Year, Month) %>% 
     summarise(across(c(Phase_1, Phase_2, Phase_3, Phase_4, Phase_5, Phase_3above), sum)) %>% 
@@ -171,7 +174,31 @@ library(psych)
   }
   AFG_harvest <- list(wheat_barley=AFG_wheat_barley,
                       corn_rice=AFG_corn_rice)
+
+  # https://data.humdata.org/dataset/afg-rainfall-subnational
+  precipitation_AFG <- read.csv("Food security/afg-rainfall-adm2-full.csv") %>% as_tibble %>% 
+    mutate(date = as.Date(date, "%m/%d/%Y")) %>% 
+    filter(date >= as.Date("5/1/2016", "%m/%d/%Y") & date < as.Date("4/1/2024", "%m/%d/%Y")) %>% 
+    mutate(ADM1_PCODE = substr(ADM2_PCODE, 1, 4))
+  precipitation_AFG <- precipitation_AFG %>% 
+    group_by(date, ADM1_PCODE) %>% 
+    summarize(across(rfh:r3h_avg, function(x) sum(x))) %>% 
+    mutate(year = year(date),
+           month = month(date),
+           year_month = paste(year, month, sep="_")) %>% 
+    group_by(ADM1_PCODE, year, month, year_month) %>% 
+    summarize(across(c(date, rfh:r3h_avg), function(x) rev(x)[1])) %>% # only use 21st records in each month
+    left_join(afg_adm_codes %>% rename(Area=ADM1_EN), by="ADM1_PCODE")
   
+  rainfall_tbl <- tibble()
+  for (adm1 in unique(precipitation_AFG$Area)) {
+    rainfall_tbl_area <- precipitation_AFG %>% filter(Area == adm1) %>% select(r1h, r3h)
+    rainfall_tbl_area <- rainfall_tbl_area
+    rainfall_tbl_area$spi_1h <- spi(rainfall_tbl_area$r1h, 12)$fitted
+    rainfall_tbl_area$spi_3h <- spi(rainfall_tbl_area$r3h, 12)$fitted
+    rainfall_tbl <- bind_rows(rainfall_tbl, rainfall_tbl_area)
+  }
+  precipitation_AFG <- left_join(precipitation_AFG, rainfall_tbl %>% select(-r1h, -r3h), by=c("ADM1_PCODE", "year", "month"))
 }
 {
 n_t <- nrow(IPC_AFG_year_month)
@@ -194,6 +221,17 @@ crop_seasons <- crop_seasons_AFG
 no_crop_areas <- no_crop_areas_AFG
 conflict_types <- conflict_AFG %>% select(event_type, sub_event_type) %>% unique %>% arrange(event_type, sub_event_type)
 }
+
+data.frame(r3h_avg=precipitation_AFG$r3h_avg, r3h_avg_SPI=spi(precipitation_AFG$r3h_avg, 12))
+
+conflict_AFG$event_type %>% table
+conflict_AFG$sub_event_type %>% table
+
+conflict_AFG %>% ggplot +
+  geom_bar(aes(x=event_type, fill=sub_event_type)) + xlab("") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+conflict_AFG %>% select(event_type, sub_event_type) %>% unique %>% arrange(event_type, sub_event_type) %>% print(n=24)
+
 conflict_AFG %>% arrange(year, month) # the oldest date is 2017-01-31
 
 load("Food Security/lagged_reg_data_list_AFG.RData")
@@ -245,6 +283,78 @@ lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>%
   ggplot(aes(x=c_n_events_etc._t_diff, y=IPC_diff)) +
   geom_point()
 
+# regression with filtered data
+IPC_AFG_phase3_long_lagged <- IPC_AFG_provinces_long %>% 
+  mutate(year = as.character(Year) %>% as.numeric,
+         month = as.character(Month) %>% as.numeric) %>% 
+  ungroup(Year) %>% 
+  select(Area, year, month, Phase_3above_ratio) %>% 
+  left_join(crop_seasons_AFG %>% mutate(season = as.factor(season)), by="month") %>% 
+  left_join(lagged_reg_data_list_AFG[[month_lag_]]$conflict_NAT_aggr %>%
+              select(-year_month) %>% 
+              mutate(event_type = ifelse(event_type %in% c("Battles", "Explosions/Remote violence"),
+                                         "Battles_explosions",
+                                         ifelse(event_type %in% c("Protests", "Riots"), "Protests_Riots",
+                                                "etc.")
+              )) %>% 
+              group_by(Area, event_type, year, month) %>% 
+              summarize(n_events = sum(n_events), fatalities = sum(fatalities)),
+            by=c("Area", "year", "month")) %>% 
+  pivot_wider(names_from = event_type, values_from = c("n_events", "fatalities")) %>% 
+  left_join(lagged_reg_data_list_AFG[[month_lag_]]$disaster_NAT_monthly_aggr %>% select(-year_month), by=c("Area", "year", "month"))
+
+IPC_AFG_phase3_long_lagged[is.na(IPC_AFG_phase3_long_lagged)] <- 0
+IPC_AFG_phase3_long_lagged <- IPC_AFG_phase3_long_lagged %>% 
+  mutate(IPC_t_1 = lag(Phase_3above_ratio),
+         across(n_events_Battles_explosions:fatalities_etc., function(x) x - lag(x), .names="{col}_diff")) %>% 
+  relocate(Area, year, month, Phase_3above_ratio, IPC_t_1) %>% 
+  ungroup(Area)
+  # n_row = 416
+lm(Phase_3above_ratio~., data=IPC_AFG_phase3_long_lagged[,4:17]) %>% summary
+lm(Phase_3above_ratio~., data=IPC_AFG_phase3_long_lagged %>% select(-(Area:month), -(n_events_Battles_explosions:fatalities_etc.))) %>% summary
+
+IPC_AFG_year_month
+conflict_map_AFG <- function(i) {
+  AFG_map %>% left_join(IPC_AFG_phase3_long_lagged %>%
+                          filter(year == IPC_AFG_year_month$Year[i] & month == IPC_AFG_year_month$Month[i]) %>%
+                          select(Area, n_events_Battles_explosions) %>% rename(shapeName=Area),
+                        by="shapeName") %>% 
+    ggplot() + geom_sf(aes(fill=n_events_Battles_explosions)) +
+    scale_fill_viridis_c() +
+    theme_bw() +
+    theme(panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          panel.border = element_blank(),
+          axis.text = element_blank(),
+          line = element_blank())
+}
+
+conflict_map_AFG(1)
+conflict_map_AFG(2)
+conflict_map_AFG(3)
+conflict_map_AFG(4)
+conflict_map_AFG(5)
+conflict_map_AFG(6)
+conflict_map_AFG(7)
+conflict_map_AFG(8)
+conflict_map_AFG(9)
+conflict_map_AFG(10)
+
+## regression with rainfall data
+IPC_AFG_phase3_long_lagged_rainfall <- left_join(IPC_AFG_phase3_long_lagged, precipitation_AFG, by=c("Area", "year", "month"))
+lm(Phase_3above_ratio~., data=IPC_AFG_phase3_long_lagged_rainfall %>%
+     select(Phase_3above_ratio:n_disaster2, r1h)) %>% summary
+lm(Phase_3above_ratio~., data=IPC_AFG_phase3_long_lagged_rainfall %>%
+     select(Phase_3above_ratio:n_disaster2, spi_1h)) %>% summary
+lm(Phase_3above_ratio~., data=IPC_AFG_phase3_long_lagged_rainfall %>%
+     select(Phase_3above_ratio:n_disaster2, r3h)) %>% summary
+lm(Phase_3above_ratio~., data=IPC_AFG_phase3_long_lagged_rainfall %>%
+     select(Phase_3above_ratio:n_disaster2, spi_3h)) %>% summary
+lm(Phase_3above_ratio~.+season*r3h, data=IPC_AFG_phase3_long_lagged_rainfall %>%
+     select(Phase_3above_ratio:n_disaster2, r3h)) %>% summary
+lm(Phase_3above_ratio~.+season*spi_3h, data=IPC_AFG_phase3_long_lagged_rainfall %>%
+     select(Phase_3above_ratio:n_disaster2, spi_3h)) %>% summary
+## disaster ts plots
 lagged_months <- 1
 # disaster1 <- "Flood"; disaster2 <- "Drought"
 disaster_AFG_monthly_aggr_by_type <- disaster_AFG %>% 
