@@ -18,7 +18,7 @@ library(SPEI)
   SDN_map <- read_sf("Food Security/geoBoundaries-SDN-ADM1.geojson")
   SDN_map$shapeName[which(SDN_map$shapeName == "Abyei PCA")] <- "Abyei"
   
-  SDN_adm_SDNes <- read_xlsx(("Food Security/SDN adm2 boundaries.xlsx")) %>% select(ADM1_EN, ADM1_PSDNE) %>% unique %>% arrange(ADM1_EN)
+  SDN_adm_SDNes <- read_xlsx(("Food Security/SDN adm2 boundaries.xlsx")) %>% select(ADM1_EN, ADM1_PCODE) %>% unique %>% arrange(ADM1_EN)
   SDN_adm_SDNes$ADM1_EN[which(SDN_adm_SDNes$ADM1_EN == "Abyei PCA")] <- "Abyei"
   SDN_adm_SDNes$ADM1_EN[which(SDN_adm_SDNes$ADM1_EN == "Aj Jazirah")] <- "Gezira"
   
@@ -128,16 +128,16 @@ library(SPEI)
   precipitation_SDN <- read.csv("Food security/sdn-rainfall-adm2-full.csv") %>% as_tibble %>% 
     mutate(date = as.Date(date, "%m/%d/%Y")) %>% 
     filter(date >= as.Date("6/1/2018", "%m/%d/%Y") & date < as.Date("5/1/2024", "%m/%d/%Y")) %>% 
-    mutate(ADM1_PSDNE = substr(ADM2_PSDNE, 1, 4))
+    mutate(ADM1_PCODE = substr(ADM2_PCODE, 1, 4))
   precipitation_SDN <- precipitation_SDN %>% 
-    group_by(date, ADM1_PSDNE) %>% 
+    group_by(date, ADM1_PCODE) %>% 
     summarize(across(rfh:r3h_avg, function(x) sum(x))) %>% 
     mutate(year = year(date),
            month = month(date),
            year_month = paste(year, month, sep="_")) %>% 
-    group_by(ADM1_PSDNE, year, month, year_month) %>% 
+    group_by(ADM1_PCODE, year, month, year_month) %>% 
     summarize(across(c(date, rfh:r3h_avg), function(x) rev(x)[1])) %>% 
-    left_join(SDN_adm_SDNes %>% rename(Area=ADM1_EN), by="ADM1_PSDNE")
+    left_join(SDN_adm_SDNes %>% rename(Area=ADM1_EN), by="ADM1_PCODE")
   
   rainfall_tbl <- tibble()
   for (adm1 in unique(precipitation_SDN$Area)) {
@@ -147,7 +147,7 @@ library(SPEI)
     rainfall_tbl_area$spi_3h <- spi(rainfall_tbl_area$r3h, 12)$fitted
     rainfall_tbl <- bind_rows(rainfall_tbl, rainfall_tbl_area)
   }
-  precipitation_SDN <- left_join(precipitation_SDN, rainfall_tbl %>% select(-r1h, -r3h), by=c("ADM1_PSDNE", "year", "month"))
+  precipitation_SDN <- left_join(precipitation_SDN, rainfall_tbl %>% select(-r1h, -r3h), by=c("ADM1_PCODE", "year", "month"))
 }
 {
 n_t <- nrow(IPC_SDN_year_month)
@@ -169,6 +169,7 @@ IPC_NAT_year_month_list <- IPC_SDN_year_month_list
 crop_seasons <- crop_seasons_SDN
 no_crop_areas <- no_crop_areas_SDN
 conflict_types <- conflict_SDN %>% select(event_type, sub_event_type) %>% unique %>% arrange(event_type, sub_event_type)
+load("Food Security/lagged_reg_data_list_SDN.RData")
 }
 
 conflict_SDN$event_type %>% table
@@ -179,7 +180,7 @@ conflict_SDN %>% ggplot +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 conflict_SDN %>% select(event_type, sub_event_type) %>% unique %>% arrange(event_type, sub_event_type) %>% print(n=24)
 
-load("Food Security/lagged_reg_data_list_SDN.RData")
+
 
 month_lag_ <- 4
 # IPC vs. conflict
@@ -229,6 +230,7 @@ lagged_reg_data_list_SDN[[month_lag_]]$lagged_reg_data %>%
   geom_point()
 
 # regression with filtered data
+month_lag_ <- 4
 IPC_SDN_phase3_long_lagged <- IPC_SDN_provinces_long %>% 
   mutate(year = as.character(Year) %>% as.numeric,
          month = as.character(Month) %>% as.numeric) %>% 
@@ -255,8 +257,10 @@ IPC_SDN_phase3_long_lagged <- IPC_SDN_phase3_long_lagged %>%
   relocate(Area, year, month, Phase_3above_ratio, IPC_t_1) %>% 
   ungroup(Area)
   # n_row = 107
-lm(Phase_3above_ratio~., data=IPC_SDN_phase3_long_lagged[,4:17]) %>% summary
-lm(Phase_3above_ratio~., data=IPC_SDN_phase3_long_lagged %>% select(-(Area:month), -(n_events_Battles_explosions:fatalities_etc.))) %>% summary
+lm_conflict_SDN <- lm(Phase_3above_ratio~., data=IPC_SDN_phase3_long_lagged[,4:17])
+lm_conflict_SDN %>% summary
+lm_conflict_diff_SDN <- lm(Phase_3above_ratio~., data=IPC_SDN_phase3_long_lagged %>% select(-(Area:month), -(n_events_Battles_explosions:fatalities_etc.)))
+lm_conflict_diff_SDN %>% summary
 
 IPC_SDN_year_month
 conflict_map_SDN <- function(i) {
@@ -286,12 +290,20 @@ IPC_SDN_phase3_long_lagged %>% group_by(Area) %>% summarize(across(n_events_Batt
 SDN_Area_ordered_by_n_events <- IPC_SDN_phase3_long_lagged %>% group_by(Area) %>% summarize(across(n_events_Battles_explosions:n_events_etc., function(x) sum(x))) %>%
   arrange(desc(n_events_Battles_explosions)) %>% pull(Area)
 
-lm(Phase_3above_ratio~., data=IPC_SDN_phase3_long_lagged %>%
+lm_conflict_SDN_high_violence <- lm(Phase_3above_ratio~., data=IPC_SDN_phase3_long_lagged %>%
      filter(Area %in% SDN_Area_ordered_by_n_events[1:7]) %>% 
-     select(-(Area:month), -(n_events_Battles_explosions_diff:fatalities_etc._diff))) %>% summary
-lm(Phase_3above_ratio~., data=IPC_SDN_phase3_long_lagged %>% 
+     select(-(Area:month), -(n_events_Battles_explosions_diff:fatalities_etc._diff)))
+lm_conflict_diff_SDN_high_violence <- lm(Phase_3above_ratio~., data=IPC_SDN_phase3_long_lagged %>% 
      filter(Area %in% SDN_Area_ordered_by_n_events[1:7]) %>% 
-     select(-(Area:month), -(n_events_Battles_explosions:fatalities_etc.))) %>% summary
+     select(-(Area:month), -(n_events_Battles_explosions:fatalities_etc.)))
+
+lm_conflict_SDN_high_violence %>% summary
+lm_conflict_diff_SDN_high_violence %>% summary
+
+lm_conflict_SDN$residuals[(names(lm_conflict_SDN$residuals) %>% as.numeric) %in% which(IPC_SDN_phase3_long_lagged$Area %in% SDN_Area_ordered_by_n_events)] %>% summary
+lm_conflict_diff_SDN$residuals[(names(lm_conflict_diff_SDN$residuals) %>% as.numeric) %in% which(IPC_SDN_phase3_long_lagged$Area %in% SDN_Area_ordered_by_n_events)] %>% summary
+lm_conflict_SDN_high_violence$residuals %>% summary
+lm_conflict_diff_SDN_high_violence$residuals %>% summary
 
 ## regression with rainfall data
 IPC_SDN_phase3_long_lagged_rainfall <- left_join(IPC_SDN_phase3_long_lagged, precipitation_SDN, by=c("Area", "year", "month"))
@@ -300,13 +312,79 @@ lm(Phase_3above_ratio~., data=IPC_SDN_phase3_long_lagged_rainfall %>%
 lm(Phase_3above_ratio~., data=IPC_SDN_phase3_long_lagged_rainfall %>%
      select(Phase_3above_ratio:n_disaster2, spi_1h)) %>% summary
 lm(Phase_3above_ratio~., data=IPC_SDN_phase3_long_lagged_rainfall %>%
+     select(Phase_3above_ratio:n_disaster2, spi_1h) %>% 
+     mutate(spi_1h_pos = ifelse(spi_1h < 0, 0, spi_1h),
+            spi_1h_neg = ifelse(spi_1h < 0, spi_1h, 0)) %>%
+     select(-spi_1h)) %>% summary
+
+lm(Phase_3above_ratio~., data=IPC_SDN_phase3_long_lagged_rainfall %>%
      select(Phase_3above_ratio:n_disaster2, r3h)) %>% summary
 lm(Phase_3above_ratio~., data=IPC_SDN_phase3_long_lagged_rainfall %>%
      select(Phase_3above_ratio:n_disaster2, spi_3h)) %>% summary
+lm(Phase_3above_ratio~., data=IPC_SDN_phase3_long_lagged_rainfall %>%
+     select(Phase_3above_ratio:n_disaster2, spi_3h) %>% 
+     mutate(spi_3h_pos = ifelse(spi_3h < 0, 0, spi_3h),
+            spi_3h_neg = ifelse(spi_3h < 0, spi_3h, 0)) %>%
+     select(-spi_3h)) %>% summary
+
 lm(Phase_3above_ratio~.+season*r3h, data=IPC_SDN_phase3_long_lagged_rainfall %>%
      select(Phase_3above_ratio:n_disaster2, r3h)) %>% summary
 lm(Phase_3above_ratio~.+season*spi_3h, data=IPC_SDN_phase3_long_lagged_rainfall %>%
      select(Phase_3above_ratio:n_disaster2, spi_3h)) %>% summary
+
+# regression with filtered data (Battles = Armed clash only)
+month_lag_ <- 4
+IPC_SDN_phase3_long_lagged <- IPC_SDN_provinces_long %>% 
+  mutate(year = as.character(Year) %>% as.numeric,
+         month = as.character(Month) %>% as.numeric) %>% 
+  ungroup(Year) %>% 
+  select(Area, year, month, Phase_3above_ratio) %>% 
+  left_join(lagged_reg_data_list_SDN[[month_lag_]]$conflict_sub_NAT_aggr %>%
+              select(-year_month) %>% 
+              mutate(event_type = ifelse(event_type %in% c("Battles", "Explosions/Remote violence"),
+                                         "Battles_explosions",
+                                         ifelse(event_type %in% c("Protests", "Riots"), "Protests_Riots",
+                                                "etc.")
+              )) %>% 
+              group_by(Area, event_type, year, month) %>% 
+              summarize(n_events = sum(n_events), fatalities = sum(fatalities)),
+            by=c("Area", "year", "month")) %>% 
+  mutate(event_type = ifelse(is.na(event_type), "etc.", event_type)) %>% 
+  complete(year, month, event_type) %>%
+  left_join(crop_seasons_SDN %>% mutate(season = as.factor(season)), by="month") %>% 
+  filter(!is.na(Phase_3above_ratio)) %>% 
+  pivot_wider(names_from = event_type, values_from = c("n_events", "fatalities")) %>% 
+  left_join(lagged_reg_data_list_SDN[[month_lag_]]$disaster_NAT_monthly_aggr %>% select(-year_month), by=c("Area", "year", "month"))
+
+IPC_SDN_phase3_long_lagged[is.na(IPC_SDN_phase3_long_lagged)] <- 0
+IPC_SDN_phase3_long_lagged <- IPC_SDN_phase3_long_lagged %>% 
+  mutate(IPC_t_1 = lag(Phase_3above_ratio),
+         across(n_events_Battles_explosions:fatalities_etc., function(x) x - lag(x), .names="{col}_diff")) %>% 
+  relocate(Area, year, month, Phase_3above_ratio, IPC_t_1) %>% 
+  ungroup(Area)
+# n_row = 107
+lm_conflict_SDN <- lm(Phase_3above_ratio~., data=IPC_SDN_phase3_long_lagged[,4:17])
+lm_conflict_SDN %>% summary
+lm_conflict_diff_SDN <- lm(Phase_3above_ratio~., data=IPC_SDN_phase3_long_lagged %>% select(-(Area:month), -(n_events_Battles_explosions:fatalities_etc.)))
+lm_conflict_diff_SDN %>% summary
+
+SDN_Area_ordered_by_n_events <- IPC_SDN_phase3_long_lagged %>% group_by(Area) %>% summarize(across(n_events_Battles_explosions:n_events_etc., function(x) sum(x))) %>%
+  arrange(desc(n_events_Battles_explosions)) %>% pull(Area)
+
+lm_conflict_SDN_high_violence <- lm(Phase_3above_ratio~., data=IPC_SDN_phase3_long_lagged %>%
+                                      filter(Area %in% SDN_Area_ordered_by_n_events[1:7]) %>% 
+                                      select(-(Area:month), -(n_events_Battles_explosions_diff:fatalities_etc._diff)))
+lm_conflict_diff_SDN_high_violence <- lm(Phase_3above_ratio~., data=IPC_SDN_phase3_long_lagged %>% 
+                                           filter(Area %in% SDN_Area_ordered_by_n_events[1:7]) %>% 
+                                           select(-(Area:month), -(n_events_Battles_explosions:fatalities_etc.)))
+
+lm_conflict_SDN_high_violence %>% summary
+lm_conflict_diff_SDN_high_violence %>% summary
+
+lm_conflict_SDN$residuals[(names(lm_conflict_SDN$residuals) %>% as.numeric) %in% which(IPC_SDN_phase3_long_lagged$Area %in% SDN_Area_ordered_by_n_events)] %>% summary
+lm_conflict_diff_SDN$residuals[(names(lm_conflict_diff_SDN$residuals) %>% as.numeric) %in% which(IPC_SDN_phase3_long_lagged$Area %in% SDN_Area_ordered_by_n_events)] %>% summary
+lm_conflict_SDN_high_violence$residuals %>% summary
+lm_conflict_diff_SDN_high_violence$residuals %>% summary
 
 lagged_months <- 1
 disaster1 <- "Flood"; disaster2 <- "Epidemic"

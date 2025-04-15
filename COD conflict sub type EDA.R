@@ -307,8 +307,10 @@ IPC_COD_phase3_long_lagged <- IPC_COD_phase3_long_lagged %>%
   relocate(Area, year, month, Phase_3above_ratio, IPC_t_1) %>% 
   ungroup(Area)
 
-lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged[,4:17]) %>% summary
-lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged %>% select(-(Area:month), -(n_events_Battles_explosions:fatalities_etc.))) %>% summary
+lm_conflict_COD <- lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged[,4:17])
+lm_conflict_COD %>% summary
+lm_conflict_diff_COD <- lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged %>% select(-(Area:month), -(n_events_Battles_explosions:fatalities_etc.)))
+lm_conflict_diff_COD %>% summary
 
 IPC_COD_year_month
 conflict_map_COD <- function(i) {
@@ -338,12 +340,19 @@ IPC_COD_phase3_long_lagged %>% group_by(Area) %>% summarize(across(n_events_Batt
 COD_Area_ordered_by_n_events <- IPC_COD_phase3_long_lagged %>% group_by(Area) %>% summarize(across(n_events_Battles_explosions:n_events_etc., function(x) sum(x))) %>%
   arrange(desc(n_events_Battles_explosions)) %>% pull(Area)
 
-lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged %>%
+lm_conflict_COD_high_conflict <- lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged %>%
      filter(Area %in% COD_Area_ordered_by_n_events[1:6]) %>% 
-     select(-(Area:month), -(n_events_Battles_explosions_diff:fatalities_etc._diff))) %>% summary
-lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged %>% 
+     select(-(Area:month), -(n_events_Battles_explosions_diff:fatalities_etc._diff)))
+lm_conflict_diff_COD_high_conflict <- lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged %>% 
      filter(Area %in% COD_Area_ordered_by_n_events[1:6]) %>% 
-     select(-(Area:month), -(n_events_Battles_explosions:fatalities_etc.))) %>% summary
+     select(-(Area:month), -(n_events_Battles_explosions:fatalities_etc.)))
+lm_conflict_COD_high_conflict %>% summary
+lm_conflict_diff_COD_high_conflict %>% summary
+
+lm_conflict_COD$residuals[(names(lm_conflict_COD$residuals) %>% as.numeric) %in% which(IPC_COD_phase3_long_lagged$Area %in% COD_Area_ordered_by_n_events)] %>% summary
+lm_conflict_diff_COD$residuals[(names(lm_conflict_diff_COD$residuals) %>% as.numeric) %in% which(IPC_COD_phase3_long_lagged$Area %in% COD_Area_ordered_by_n_events)] %>% summary
+lm_conflict_COD_high_conflict$residuals %>% summary
+lm_conflict_diff_COD_high_conflict$residuals %>% summary
 
 ## regression with rainfall data
 IPC_COD_phase3_long_lagged_rainfall <- left_join(IPC_COD_phase3_long_lagged, precipitation_COD, by=c("Area", "year", "month"))
@@ -352,15 +361,82 @@ lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged_rainfall %>%
 lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged_rainfall %>%
      select(Phase_3above_ratio:n_disaster2, spi_1h)) %>% summary
 lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged_rainfall %>%
+     select(Phase_3above_ratio:n_disaster2, spi_1h) %>% 
+     mutate(spi_1h_pos = ifelse(spi_1h < 0, 0, spi_1h),
+            spi_1h_neg = ifelse(spi_1h < 0, spi_1h, 0)) %>%
+     select(-spi_1h)) %>% summary
+
+lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged_rainfall %>%
      select(Phase_3above_ratio:n_disaster2, r3h)) %>% summary
 lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged_rainfall %>%
      select(Phase_3above_ratio:n_disaster2, spi_3h)) %>% summary
+lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged_rainfall %>%
+     select(Phase_3above_ratio:n_disaster2, spi_3h) %>% 
+     mutate(spi_3h_pos = ifelse(spi_3h < 0, 0, spi_3h),
+            spi_3h_neg = ifelse(spi_3h < 0, spi_3h, 0)) %>%
+     select(-spi_3h)) %>% summary
+
 lm(Phase_3above_ratio~.+season*r3h, data=IPC_COD_phase3_long_lagged_rainfall %>%
      select(Phase_3above_ratio:n_disaster2, r3h)) %>% summary
 lm(Phase_3above_ratio~.+season*spi_3h, data=IPC_COD_phase3_long_lagged_rainfall %>%
      select(Phase_3above_ratio:n_disaster2, spi_3h)) %>% summary
 
 lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged %>% select(-(Area:month), -(n_events_Battles_explosions:fatalities_etc.))) %>% summary
+
+# regression with filtered data (Battles = Armed clash only)
+IPC_COD_phase3_long_lagged <- IPC_COD_provinces_long %>% 
+  mutate(year = as.character(Year) %>% as.numeric,
+         month = as.character(Month) %>% as.numeric) %>% 
+  ungroup(Year) %>% 
+  select(Area, year, month, Phase_3above_ratio) %>% 
+  left_join(lagged_reg_data_list_COD[[month_lag_]]$conflict_sub_NAT_aggr %>%
+              select(-year_month) %>% 
+              mutate(event_type = ifelse(event_type %in% c("Battles", "Explosions/Remote violence"),
+                                         "Battles_explosions",
+                                         ifelse(event_type %in% c("Protests", "Riots"), "Protests_Riots",
+                                                "etc.")
+              )) %>% 
+              group_by(Area, event_type, year, month) %>% 
+              summarize(n_events = sum(n_events), fatalities = sum(fatalities)),
+            by=c("Area", "year", "month")) %>% 
+  mutate(event_type = ifelse(is.na(event_type), "etc.", event_type)) %>% 
+  complete(year, month, event_type) %>%
+  left_join(corn_seasons_COD, by="month") %>% 
+  mutate(season = ifelse(Area == "Haut Katanga", season_south, season) %>% as.factor) %>% select(-season_south) %>% 
+  filter(!is.na(Phase_3above_ratio)) %>% 
+  pivot_wider(names_from = event_type, values_from = c("n_events", "fatalities")) %>% 
+  left_join(lagged_reg_data_list_COD[[month_lag_]]$disaster_NAT_monthly_aggr %>% select(-year_month), by=c("Area", "year", "month"))
+
+IPC_COD_phase3_long_lagged[is.na(IPC_COD_phase3_long_lagged)] <- 0
+IPC_COD_phase3_long_lagged <- IPC_COD_phase3_long_lagged %>% 
+  mutate(IPC_t_1 = lag(Phase_3above_ratio),
+         across(n_events_Battles_explosions:fatalities_etc., function(x) x - lag(x), .names="{col}_diff")) %>% 
+  relocate(Area, year, month, Phase_3above_ratio, IPC_t_1) %>% 
+  ungroup(Area)
+
+lm_conflict_COD <- lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged[,4:17])
+lm_conflict_COD %>% summary
+lm_conflict_diff_COD <- lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged %>% select(-(Area:month), -(n_events_Battles_explosions:fatalities_etc.)))
+lm_conflict_diff_COD %>% summary
+
+IPC_COD_phase3_long_lagged %>% group_by(Area) %>% summarize(across(n_events_Battles_explosions:n_events_etc., function(x) sum(x))) %>%
+  arrange(desc(n_events_Battles_explosions)) %>% print(n=26)
+COD_Area_ordered_by_n_events <- IPC_COD_phase3_long_lagged %>% group_by(Area) %>% summarize(across(n_events_Battles_explosions:n_events_etc., function(x) sum(x))) %>%
+  arrange(desc(n_events_Battles_explosions)) %>% pull(Area)
+
+lm_conflict_COD_high_conflict <- lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged %>%
+                                      filter(Area %in% COD_Area_ordered_by_n_events[1:6]) %>% 
+                                      select(-(Area:month), -(n_events_Battles_explosions_diff:fatalities_etc._diff)))
+lm_conflict_diff_COD_high_conflict <- lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged %>% 
+                                           filter(Area %in% COD_Area_ordered_by_n_events[1:6]) %>% 
+                                           select(-(Area:month), -(n_events_Battles_explosions:fatalities_etc.)))
+lm_conflict_COD_high_conflict %>% summary
+lm_conflict_diff_COD_high_conflict %>% summary
+
+lm_conflict_COD$residuals[(names(lm_conflict_COD$residuals) %>% as.numeric) %in% which(IPC_COD_phase3_long_lagged$Area %in% COD_Area_ordered_by_n_events)] %>% summary
+lm_conflict_diff_COD$residuals[(names(lm_conflict_diff_COD$residuals) %>% as.numeric) %in% which(IPC_COD_phase3_long_lagged$Area %in% COD_Area_ordered_by_n_events)] %>% summary
+lm_conflict_COD_high_conflict$residuals %>% summary
+lm_conflict_diff_COD_high_conflict$residuals %>% summary
 
 ###
 lagged_months <- 1
