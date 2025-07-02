@@ -280,6 +280,7 @@ lagged_reg_data_list_COD[[month_lag_]]$lagged_reg_data %>%
 
 
 # regression with filtered data
+month_lag_ <- 4
 IPC_COD_phase3_long_lagged <- IPC_COD_provinces_long %>% 
   mutate(year = as.character(Year) %>% as.numeric,
          month = as.character(Month) %>% as.numeric) %>% 
@@ -340,19 +341,36 @@ IPC_COD_phase3_long_lagged %>% group_by(Area) %>% summarize(across(n_events_Batt
 COD_Area_ordered_by_n_events <- IPC_COD_phase3_long_lagged %>% group_by(Area) %>% summarize(across(n_events_Battles_explosions:n_events_etc., function(x) sum(x))) %>%
   arrange(desc(n_events_Battles_explosions)) %>% pull(Area)
 
-lm_conflict_COD_high_conflict <- lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged %>%
+lm_conflict_COD_high_violence <- lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged %>%
      filter(Area %in% COD_Area_ordered_by_n_events[1:6]) %>% 
      select(-(Area:month), -(n_events_Battles_explosions_diff:fatalities_etc._diff)))
-lm_conflict_diff_COD_high_conflict <- lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged %>% 
+lm_conflict_diff_COD_high_violence <- lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged %>% 
      filter(Area %in% COD_Area_ordered_by_n_events[1:6]) %>% 
      select(-(Area:month), -(n_events_Battles_explosions:fatalities_etc.)))
-lm_conflict_COD_high_conflict %>% summary
-lm_conflict_diff_COD_high_conflict %>% summary
+lm_conflict_COD_high_violence %>% summary
+lm_conflict_diff_COD_high_violence %>% summary
 
-lm_conflict_COD$residuals[(names(lm_conflict_COD$residuals) %>% as.numeric) %in% which(IPC_COD_phase3_long_lagged$Area %in% COD_Area_ordered_by_n_events)] %>% summary
-lm_conflict_diff_COD$residuals[(names(lm_conflict_diff_COD$residuals) %>% as.numeric) %in% which(IPC_COD_phase3_long_lagged$Area %in% COD_Area_ordered_by_n_events)] %>% summary
-lm_conflict_COD_high_conflict$residuals %>% summary
-lm_conflict_diff_COD_high_conflict$residuals %>% summary
+COD_high_violence_index <- which(names(lm_conflict_COD$residuals) %>% as.numeric %in% which(IPC_COD_phase3_long_lagged$Area %in% COD_Area_ordered_by_n_events[1:6]))
+lm_conflict_COD$residuals[COD_high_violence_index] %>% summary
+mean((lm_conflict_COD$residuals)^2)
+mean((lm_conflict_COD$residuals[COD_high_violence_index])^2) # 0.006060401
+lm_conflict_COD_y_bar <- mean(lm_conflict_COD$model$Phase_3above_ratio[COD_high_violence_index])
+1-sum((lm_conflict_COD$residuals[COD_high_violence_index])^2)/sum((lm_conflict_COD$model$Phase_3above_ratio[COD_high_violence_index]-lm_conflict_COD_y_bar)^2) # R^2: 0.4982445
+lm_conflict_diff_COD$residuals[COD_high_violence_index] %>% summary
+mean((lm_conflict_diff_COD$residuals)^2)
+mean((lm_conflict_diff_COD$residuals[COD_high_violence_index])^2) # 0.005902252
+lm_conflict_COD_high_violence$residuals %>% summary
+lm_conflict_diff_COD_high_violence$residuals %>% summary
+mean((lm_conflict_COD_high_violence$residuals)^2) # 0.004088291
+mean((lm_conflict_diff_COD_high_violence$residuals)^2) # 0.004071313
+
+ggplot(data.frame(x=1:length(COD_high_violence_index), residuals=lm_conflict_COD$residuals[COD_high_violence_index])) +
+  geom_point(aes(x=x, y=residuals)) + ylim(-0.2, 0.35) + ggtitle("Residuals in highly conflicted areas of global model (COD)") +
+  geom_abline(slope=0, intercept=mean((lm_conflict_COD$residuals[COD_high_violence_index])^2))
+
+ggplot(data.frame(x=1:length(COD_high_violence_index), residuals=lm_conflict_COD_high_violence$residuals)) +
+  geom_point(aes(x=x, y=residuals)) + ylim(-0.2, 0.35) + ggtitle("Residuals of local model (COD)") +
+  geom_abline(slope=0, intercept=mean((lm_conflict_COD_high_violence$residuals)^2))
 
 ## regression with rainfall data
 IPC_COD_phase3_long_lagged_rainfall <- left_join(IPC_COD_phase3_long_lagged, precipitation_COD, by=c("Area", "year", "month"))
@@ -365,6 +383,13 @@ lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged_rainfall %>%
      mutate(spi_1h_pos = ifelse(spi_1h < 0, 0, spi_1h),
             spi_1h_neg = ifelse(spi_1h < 0, spi_1h, 0)) %>%
      select(-spi_1h)) %>% summary
+lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged_rainfall %>%
+     select(Phase_3above_ratio:n_disaster2, spi_1h) %>% 
+     mutate(spi_1h_class = ifelse(spi_1h > 1, "wet",
+                                  ifelse(spi_1h < -1, "dry", "normal")) %>%
+              factor(levels=c("normal", "wet", "dry"))
+     ) %>%
+     select(-spi_1h)) %>% summary
 
 lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged_rainfall %>%
      select(Phase_3above_ratio:n_disaster2, r3h)) %>% summary
@@ -375,6 +400,13 @@ lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged_rainfall %>%
      mutate(spi_3h_pos = ifelse(spi_3h < 0, 0, spi_3h),
             spi_3h_neg = ifelse(spi_3h < 0, spi_3h, 0)) %>%
      select(-spi_3h)) %>% summary
+lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged_rainfall %>%
+     select(Phase_3above_ratio:n_disaster2, spi_3h) %>% 
+     mutate(spi_3h_class = ifelse(spi_3h > 1, "wet",
+                                  ifelse(spi_3h < -1, "dry", "normal")) %>%
+              factor(levels=c("normal", "wet", "dry"))
+     ) %>%
+     select(-spi_3h)) %>% summary 
 
 lm(Phase_3above_ratio~.+season*r3h, data=IPC_COD_phase3_long_lagged_rainfall %>%
      select(Phase_3above_ratio:n_disaster2, r3h)) %>% summary
@@ -390,6 +422,7 @@ IPC_COD_phase3_long_lagged <- IPC_COD_provinces_long %>%
   ungroup(Year) %>% 
   select(Area, year, month, Phase_3above_ratio) %>% 
   left_join(lagged_reg_data_list_COD[[month_lag_]]$conflict_sub_NAT_aggr %>%
+              filter(event_type != "Battles" | (event_type == "Battles" & sub_event_type == "Armed clash")) %>% 
               select(-year_month) %>% 
               mutate(event_type = ifelse(event_type %in% c("Battles", "Explosions/Remote violence"),
                                          "Battles_explosions",
@@ -406,16 +439,18 @@ IPC_COD_phase3_long_lagged <- IPC_COD_provinces_long %>%
   filter(!is.na(Phase_3above_ratio)) %>% 
   pivot_wider(names_from = event_type, values_from = c("n_events", "fatalities")) %>% 
   left_join(lagged_reg_data_list_COD[[month_lag_]]$disaster_NAT_monthly_aggr %>% select(-year_month), by=c("Area", "year", "month"))
-
 IPC_COD_phase3_long_lagged[is.na(IPC_COD_phase3_long_lagged)] <- 0
 IPC_COD_phase3_long_lagged <- IPC_COD_phase3_long_lagged %>% 
   mutate(IPC_t_1 = lag(Phase_3above_ratio),
+         IPC_t_2 = lag(Phase_3above_ratio, 2),
          across(n_events_Battles_explosions:fatalities_etc., function(x) x - lag(x), .names="{col}_diff")) %>% 
   relocate(Area, year, month, Phase_3above_ratio, IPC_t_1) %>% 
   ungroup(Area)
+IPC_COD_phase3_long_lagged[is.na(IPC_COD_phase3_long_lagged)] <- 0
 
-lm_conflict_COD <- lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged[,4:17])
+lm_conflict_COD <- lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged[,4:17]) # without IPC_t_2
 lm_conflict_COD %>% summary
+lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged[,4:18]) %>% summary # with IPC_t_2 (insignificant)
 lm_conflict_diff_COD <- lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged %>% select(-(Area:month), -(n_events_Battles_explosions:fatalities_etc.)))
 lm_conflict_diff_COD %>% summary
 
@@ -424,19 +459,19 @@ IPC_COD_phase3_long_lagged %>% group_by(Area) %>% summarize(across(n_events_Batt
 COD_Area_ordered_by_n_events <- IPC_COD_phase3_long_lagged %>% group_by(Area) %>% summarize(across(n_events_Battles_explosions:n_events_etc., function(x) sum(x))) %>%
   arrange(desc(n_events_Battles_explosions)) %>% pull(Area)
 
-lm_conflict_COD_high_conflict <- lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged %>%
+lm_conflict_COD_high_violence <- lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged %>%
                                       filter(Area %in% COD_Area_ordered_by_n_events[1:6]) %>% 
                                       select(-(Area:month), -(n_events_Battles_explosions_diff:fatalities_etc._diff)))
-lm_conflict_diff_COD_high_conflict <- lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged %>% 
+lm_conflict_diff_COD_high_violence <- lm(Phase_3above_ratio~., data=IPC_COD_phase3_long_lagged %>% 
                                            filter(Area %in% COD_Area_ordered_by_n_events[1:6]) %>% 
                                            select(-(Area:month), -(n_events_Battles_explosions:fatalities_etc.)))
-lm_conflict_COD_high_conflict %>% summary
-lm_conflict_diff_COD_high_conflict %>% summary
+lm_conflict_COD_high_violence %>% summary
+lm_conflict_diff_COD_high_violence %>% summary
 
 lm_conflict_COD$residuals[(names(lm_conflict_COD$residuals) %>% as.numeric) %in% which(IPC_COD_phase3_long_lagged$Area %in% COD_Area_ordered_by_n_events)] %>% summary
 lm_conflict_diff_COD$residuals[(names(lm_conflict_diff_COD$residuals) %>% as.numeric) %in% which(IPC_COD_phase3_long_lagged$Area %in% COD_Area_ordered_by_n_events)] %>% summary
-lm_conflict_COD_high_conflict$residuals %>% summary
-lm_conflict_diff_COD_high_conflict$residuals %>% summary
+lm_conflict_COD_high_violence$residuals %>% summary
+lm_conflict_diff_COD_high_violence$residuals %>% summary
 
 ###
 lagged_months <- 1

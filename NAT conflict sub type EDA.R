@@ -252,8 +252,8 @@ lagged_data_by_m <- function(lagged_months, min_t, disaster1="Flood", disaster2=
       left_join(disaster_NAT_monthly_disaster2[,c(1, disaster_col_index)], by="Area") %>% 
       left_join(disaster_NAT_monthly_affected[,c(1, disaster_col_index)], by="Area") %>% 
       left_join(disaster_NAT_monthly_deaths[,c(1, disaster_col_index)], by="Area") %>% 
-      mutate(year = rev(IPC_NAT_year_month$Year)[IPC_col_index],
-             month = rev(IPC_NAT_year_month$Month)[IPC_col_index])
+      mutate(year = rev(IPC_NAT_year_month$Year)[i + 1],
+             month = rev(IPC_NAT_year_month$Month)[i + 1])
     reg_data_i$month_diff <- as.numeric(as.Date(paste(IPC_NAT_year_month$Year[IPC_n_months-i], IPC_NAT_year_month$Month[IPC_n_months-i], 1), format="%Y %m %d") -
                                           as.Date(paste(IPC_NAT_year_month$Year[IPC_n_months-1-i], IPC_NAT_year_month$Month[IPC_n_months-1-i], 1), format="%Y %m %d")) %/% 30
     
