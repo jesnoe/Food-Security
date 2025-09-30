@@ -142,7 +142,6 @@ library(SPEI)
   rainfall_tbl <- tibble()
   for (adm1 in unique(precipitation_SDN$Area)) {
     rainfall_tbl_area <- precipitation_SDN %>% filter(Area == adm1) %>% select(r1h, r3h)
-    rainfall_tbl_area <- rainfall_tbl_area
     rainfall_tbl_area$spi_1h <- spi(rainfall_tbl_area$r1h, 12)$fitted
     rainfall_tbl_area$spi_3h <- spi(rainfall_tbl_area$r3h, 12)$fitted
     rainfall_tbl <- bind_rows(rainfall_tbl, rainfall_tbl_area)
@@ -324,6 +323,7 @@ ggplot(data.frame(x=1:length(SDN_high_violence_index), residuals=lm_conflict_SDN
 
 ## regression with rainfall data
 IPC_SDN_phase3_long_lagged_rainfall <- left_join(IPC_SDN_phase3_long_lagged, precipitation_SDN, by=c("Area", "year", "month"))
+# write.csv(IPC_SDN_phase3_long_lagged_rainfall, "Food Security/IPC_SDN_phase3_long_lagged_rainfall.csv", row.names = F)
 lm(Phase_3above_ratio~., data=IPC_SDN_phase3_long_lagged_rainfall %>%
      select(Phase_3above_ratio:n_disaster2, r1h)) %>% summary
 lm(Phase_3above_ratio~., data=IPC_SDN_phase3_long_lagged_rainfall %>%
@@ -420,7 +420,30 @@ lm_conflict_diff_SDN$residuals[(names(lm_conflict_diff_SDN$residuals) %>% as.num
 lm_conflict_SDN_high_violence$residuals %>% summary
 lm_conflict_diff_SDN_high_violence$residuals %>% summary
 
+# ts plots
 lagged_months <- 1
+IPC_SDN_provinces_long %>% 
+  mutate(year=as.Date(paste(Month, Year, "01"), format="%m %Y %d")) %>% 
+  ggplot() + ylim(0, 1) +
+  geom_line(aes(x=year, y=Phase_3above_ratio, group=Area, color=Area))
+ggsave("Food Security/Figs/ts plots/SDN/food insecurity ts plot SDN.png", scale=1)
+
+conflict_SDN_monthly_aggr_by_type <- lagged_reg_data_list_CAF[[lagged_months]]$conflict_sub_NAT_aggr %>% group_by(year, month, event_type) %>%
+  summarize(n_events = sum(n_events),
+            fatalities = sum(fatalities)) %>% 
+  arrange(year, month) %>% 
+  mutate(year=as.Date(paste(month, year, "01"), format="%m %Y %d"))
+
+conflict_SDN_monthly_aggr_by_type %>% 
+  ggplot() +
+  geom_line(aes(x=year, y=fatalities, group=event_type, color=event_type))
+ggsave("Food Security/Figs/ts plots/SDN/conflict fatalities ts plot SDN.png", scale=1)
+
+conflict_SDN_monthly_aggr_by_type %>% 
+  ggplot() +
+  geom_line(aes(x=year, y=n_events, group=event_type, color=event_type))
+ggsave("Food Security/Figs/ts plots/SDN/conflict n_events ts plot SDN.png", scale=1)
+
 disaster1 <- "Flood"; disaster2 <- "Epidemic"
 disaster_SDN_monthly_aggr_by_type <- disaster_SDN %>% 
   filter(year > oldest_year - 1) %>% 
@@ -434,6 +457,21 @@ disaster_SDN_monthly_aggr_by_type <- disaster_SDN %>%
   mutate(year_month = paste(year, month, sep="_")) %>% 
   mutate(year=as.Date(paste(month, year, "01"), format="%m %Y %d")) %>%
   arrange(year, month)
+
+disaster_SDN_monthly_aggr_by_type %>% 
+  ggplot() +
+  geom_line(aes(x=year, y=affected, group=type, color=type))
+ggsave("Food Security/Figs/ts plots/SDN/disaster affected ts plot SDN.png", scale=1)
+
+disaster_SDN_monthly_aggr_by_type %>% 
+  ggplot() +
+  geom_line(aes(x=year, y=deaths, group=type, color=type))
+ggsave("Food Security/Figs/ts plots/SDN/disaster deaths ts plot SDN.png", scale=1)
+
+disaster_SDN_monthly_aggr_by_type %>% 
+  ggplot() +
+  geom_line(aes(x=year, y=n_disasters, group=type, color=type))
+ggsave("Food Security/Figs/ts plots/SDN/disaster n_disasters ts plot SDN.png", scale=1)
 
 disaster_SDN_monthly_aggr_by_type %>% 
   filter(type != "Flood") %>% 

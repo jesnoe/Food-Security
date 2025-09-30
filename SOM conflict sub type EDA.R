@@ -16,12 +16,12 @@ library(SPEI)
 
 {# https://www.geoboundaries.org/countryDownloads.html
   SOM_map <- read_sf("Food Security/geoBoundaries-SOM-ADM1.geojson")
-  SOM_map$shapeName[which(SOM_map$shapeName == "Hiiraan")] <- "Hiran"
+  SOM_map$shapeName[which(SOM_map$shapeName == "Hiiraan")] <- "Hiraan"
   SOM_map$shapeName %>% sort
   
+  # https://data.humdata.org/dataset/cod-ab-som
   SOM_adm_codes <- read_xlsx(("Food Security/SOM adm2 boundaries.xlsx")) %>% select(ADM1_EN, ADM1_PCODE) %>% unique %>% arrange(ADM1_EN)
-  SOM_adm_codes$ADM1_EN[which(SOM_adm_codes$ADM1_EN == "Abyei PCA")] <- "Abyei"
-  SOM_adm_codes$ADM1_EN[which(SOM_adm_codes$ADM1_EN == "Aj Jazirah")] <- "Gezira"
+  # SOM_adm_codes$ADM1_EN[which(SOM_adm_codes$ADM1_EN == "Hiraan")] <- "Hiran"
 
   disaster <- read_xlsx("Food Security/public_emdat_2024-09-17.xlsx")
   FSI <- read_xlsx("Food Security/fsi-2017.xlsx")[,1:16] %>% mutate(Year = year(Year))
@@ -65,8 +65,7 @@ library(SPEI)
   SOM_adm_codes$ADM1_EN %>% unique %>% sort
   
   IPC_SOM_provinces <- IPC_SOM_provinces_long %>% select(Area, Year, Month, Phase_3above_ratio) %>% 
-    pivot_wider(id_cols=Area, names_prefix="Phase_3+ratio_", names_from = c("Year", "Month"), values_from = Phase_3above_ratio) %>% 
-    relocate(Area, `Phase_3+ratio_2019_6`)
+    pivot_wider(id_cols=Area, names_prefix="Phase_3+ratio_", names_from = c("Year", "Month"), values_from = Phase_3above_ratio)
   
   IPC_SOM_year_month <- IPC_SOM %>% select(Year, Month) %>% unique %>%
     mutate(across(c(Year, Month), function(x) as.character(x) %>% as.numeric),
@@ -106,30 +105,26 @@ library(SPEI)
   conflict_SOM$admin1[which(conflict_SOM$admin1 == "Al Jazirah")] <- "Gezira"
   
   # from https://ipad.fas.usda.gov/countrysummary/Default.aspx?id=SO
-  # plant: 10~12, growing: 1~4, harvest: 5~7
+  # corn - plant: 4 and 9, growing: 5~7 and 10~2, harvest: 3 and 8
+  # sorghum - plant: 4 and 10, growing: 5~7 and 11~2, harvest: 3 and 8
+  # integrated - plant: 4 and 9~10, growing: 5~7 and 11~2, harvest: 3 and 8
   crop_seasons_SOM <- tibble(month=1:12,
-                             season=c(rep("none", 5), rep("plant", 2), rep("grow", 3), rep("harvest", 2)))
+                             season=c(rep("grow", 2), "harvest", "plant", rep("grow", 3), "harvest", rep("plant", 2), rep("grow", 2)))
   no_crop_areas_SOM <- c()
   
-  SOM_sorghum <- c(11:12)
+  # SOM_sorghum <- c(11:12)
   
-  time_since_harvest <- function(month., crop, country_harvest_season) {
-    if (crop == "wheat_barley") {
-      result <- ifelse(month. > country_harvest_season$wheat_barley[3], month. - country_harvest_season$wheat_barley[3],
-                       ifelse(month. < country_harvest_season$wheat_barley[1], month. + 12 - country_harvest_season$wheat_barley[3], 0))
-    }
-    if (crop == "corn_rice") {
-      result <- ifelse(month. > country_harvest_season$corn_rice[3], month. - country_harvest_season$corn_rice[3],
-                       ifelse(month. < country_harvest_season$corn_rice[1], month. + 12 - country_harvest_season$corn_rice[3], 0))
-    }
+  time_since_harvest <- function(month., country_harvest_season) {
+    result <- ifelse(month. %in% 8:12, month. - 8,
+                     ifelse(month. %in% 1:2, month. + 12 - 8, month. - 3))
     return(result)
   }
-  SOM_harvest <- list(sorghum=SOM_sorghum)
+  # SOM_harvest <- list(sorghum=SOM_sorghum)
   
   # https://data.humdata.org/dataset/som-rainfall-subnational
-  precipitation_SOM <- read.csv("Food security/SOM-rainfall-adm2-full.csv") %>% as_tibble %>% 
+  precipitation_SOM <- read.csv("Food security/som-rainfall-adm2-full.csv") %>% as_tibble %>% 
     mutate(date = as.Date(date, "%m/%d/%Y")) %>% 
-    filter(date >= as.Date("6/1/2018", "%m/%d/%Y") & date < as.Date("5/1/2024", "%m/%d/%Y")) %>% 
+    filter(date >= as.Date("1/1/2017", "%m/%d/%Y") & date < as.Date("2/1/2024", "%m/%d/%Y")) %>% 
     mutate(ADM1_PCODE = substr(ADM2_PCODE, 1, 4))
   precipitation_SOM <- precipitation_SOM %>% 
     group_by(date, ADM1_PCODE) %>% 
@@ -144,7 +139,6 @@ library(SPEI)
   rainfall_tbl <- tibble()
   for (adm1 in unique(precipitation_SOM$Area)) {
     rainfall_tbl_area <- precipitation_SOM %>% filter(Area == adm1) %>% select(r1h, r3h)
-    rainfall_tbl_area <- rainfall_tbl_area
     rainfall_tbl_area$spi_1h <- spi(rainfall_tbl_area$r1h, 12)$fitted
     rainfall_tbl_area$spi_3h <- spi(rainfall_tbl_area$r3h, 12)$fitted
     rainfall_tbl <- bind_rows(rainfall_tbl, rainfall_tbl_area)
@@ -326,6 +320,7 @@ ggplot(data.frame(x=1:length(SOM_high_violence_index), residuals=lm_conflict_SOM
 
 ## regression with rainfall data
 IPC_SOM_phase3_long_lagged_rainfall <- left_join(IPC_SOM_phase3_long_lagged, precipitation_SOM, by=c("Area", "year", "month"))
+# write.csv(IPC_SOM_phase3_long_lagged_rainfall, "Food Security/IPC_SOM_phase3_long_lagged_rainfall.csv", row.names = F)
 lm(Phase_3above_ratio~., data=IPC_SOM_phase3_long_lagged_rainfall %>%
      select(Phase_3above_ratio:n_disaster2, r1h)) %>% summary
 lm(Phase_3above_ratio~., data=IPC_SOM_phase3_long_lagged_rainfall %>%
@@ -422,7 +417,30 @@ lm_conflict_diff_SOM$residuals[(names(lm_conflict_diff_SOM$residuals) %>% as.num
 lm_conflict_SOM_high_violence$residuals %>% summary
 lm_conflict_diff_SOM_high_violence$residuals %>% summary
 
-lagged_months <- 1
+# ts plots
+lagged_months <- 4
+IPC_SOM_provinces_long %>% 
+  mutate(year=as.Date(paste(Month, Year, "01"), format="%m %Y %d")) %>% 
+  ggplot() + ylim(0, 1) +
+  geom_line(aes(x=year, y=Phase_3above_ratio, group=Area, color=Area))
+ggsave("Food Security/Figs/ts plots/SOM/food insecurity ts plot SOM.png", scale=1)
+
+conflict_SOM_monthly_aggr_by_type <- lagged_reg_data_list_CAF[[lagged_months]]$conflict_sub_NAT_aggr %>% group_by(year, month, event_type) %>%
+  summarize(n_events = sum(n_events),
+            fatalities = sum(fatalities)) %>% 
+  arrange(year, month) %>% 
+  mutate(year=as.Date(paste(month, year, "01"), format="%m %Y %d"))
+
+conflict_SOM_monthly_aggr_by_type %>% 
+  ggplot() +
+  geom_line(aes(x=year, y=fatalities, group=event_type, color=event_type))
+ggsave("Food Security/Figs/ts plots/SOM/conflict fatalities ts plot SOM.png", scale=1)
+
+conflict_SOM_monthly_aggr_by_type %>% 
+  ggplot() +
+  geom_line(aes(x=year, y=n_events, group=event_type, color=event_type))
+ggsave("Food Security/Figs/ts plots/SOM/conflict n_events ts plot SOM.png", scale=1)
+
 disaster1 <- "Flood"; disaster2 <- "Epidemic"
 disaster_SOM_monthly_aggr_by_type <- disaster_SOM %>% 
   filter(year > oldest_year - 1) %>% 
@@ -436,6 +454,21 @@ disaster_SOM_monthly_aggr_by_type <- disaster_SOM %>%
   mutate(year_month = paste(year, month, sep="_")) %>% 
   mutate(year=as.Date(paste(month, year, "01"), format="%m %Y %d")) %>%
   arrange(year, month)
+
+disaster_SOM_monthly_aggr_by_type %>% 
+  ggplot() +
+  geom_line(aes(x=year, y=affected, group=type, color=type))
+ggsave("Food Security/Figs/ts plots/SOM/disaster affected ts plot SOM.png", scale=1)
+
+disaster_SOM_monthly_aggr_by_type %>% 
+  ggplot() +
+  geom_line(aes(x=year, y=deaths, group=type, color=type))
+ggsave("Food Security/Figs/ts plots/SOM/disaster deaths ts plot SOM.png", scale=1)
+
+disaster_SOM_monthly_aggr_by_type %>% 
+  ggplot() +
+  geom_line(aes(x=year, y=n_disasters, group=type, color=type))
+ggsave("Food Security/Figs/ts plots/SOM/disaster n_disasters ts plot SOM.png", scale=1)
 
 disaster_SOM_monthly_aggr_by_type %>% 
   filter(type != "Flood") %>% 

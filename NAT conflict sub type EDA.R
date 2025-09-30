@@ -508,7 +508,7 @@ latest_year <- IPC_NAT_year_month$Year[n_t]; latest_month <- IPC_NAT_year_month$
 min(conflict_NAT$event_date)
 IPC_NAT_year_month
 month_lag <- 4 # AFG
-month_lag <- 5 # SDN, COD
+month_lag <- 5 # SDN, COD, SOM, CAF, MOZ
 
 disaster_NAT %>% 
   filter(year > oldest_year - 1) %>% 
@@ -516,12 +516,17 @@ disaster_NAT %>%
   filter(!(year == oldest_year & month < oldest_month)) %>% 
   pull(`Disaster Type`) %>% table
 disaster_type1 <- "Flood"
+disaster_type1 <- "Epidemic" # CAF
+disaster_type1 <- "Storm" # MOZ
 disaster_type2 <- "Epidemic" # SDN, COD
-disaster_type2 <- "Drought" # AFG
+disaster_type2 <- "Drought" # AFG, SOM
+disaster_type2 <- "Flood" # CAF, MOZ
 # min_t + 1: the number of year_months in lagged_reg_data from the most recent one
 min_t_ <- 9 # AFG
-min_t_ <- 3 # SDN
+min_t_ <- 3 # SDN, CAF
 min_t_ <- 5 # COD
+min_t_ <- 7 # MOZ
+min_t_ <- 10 # SOM
 lagged_reg_data_list <- list()
 for (i in 1:month_lag) {
   lagged_reg_data_list[[paste0("months_", i)]] <- lagged_data_by_m(i, min_t_, disaster1=disaster_type1, disaster2 = disaster_type2)
@@ -533,25 +538,36 @@ for (i in 1:month_lag) {
 # save("lagged_reg_data_list_SDN", file="Food Security/lagged_reg_data_list_SDN.RData")
 # lagged_reg_data_list_COD <- lagged_reg_data_list
 # save("lagged_reg_data_list_COD", file="Food Security/lagged_reg_data_list_COD.RData")
+# lagged_reg_data_list_SOM <- lagged_reg_data_list
+# save("lagged_reg_data_list_SOM", file="Food Security/lagged_reg_data_list_SOM.RData")
+# lagged_reg_data_list_CAF <- lagged_reg_data_list
+# save("lagged_reg_data_list_CAF", file="Food Security/lagged_reg_data_list_CAF.RData")
+# lagged_reg_data_list_MOZ <- lagged_reg_data_list
+# save("lagged_reg_data_list_MOZ", file="Food Security/lagged_reg_data_list_MOZ.RData")
 
 load("Food Security/lagged_reg_data_list_AFG.RData")
 load("Food Security/lagged_reg_data_list_SDN.RData")
 load("Food Security/lagged_reg_data_list_COD.RData")
+load("Food Security/lagged_reg_data_list_SOM.RData")
+load("Food Security/lagged_reg_data_list_CAF.RData")
+load("Food Security/lagged_reg_data_list_MOZ.RData")
 
 month_lag_ <- 4
 
 lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>% summary
 lagged_reg_data_list_SDN[[month_lag_]]$lagged_reg_data %>% summary
 lagged_reg_data_list_COD[[month_lag_]]$lagged_reg_data %>% summary
+lagged_reg_data_list_SOM[[month_lag_]]$lagged_reg_data %>% summary
 
 lagged_reg_data_list_AFG[[month_lag_]]$disaster_NAT_monthly_aggr %>% summary
 lagged_reg_data_list_SDN[[month_lag_]]$disaster_NAT_monthly_aggr %>% summary
 lagged_reg_data_list_COD[[month_lag_]]$disaster_NAT_monthly_aggr %>% summary
+lagged_reg_data_list_SOM[[month_lag_]]$disaster_NAT_monthly_aggr %>% summary
 
 
 lagged_reg_data_list_AFG$months_1
 
-disaster_Afg %>% 
+disaster_AFG %>% 
   filter(year > 2016 - 1) %>% 
   filter(!(year == 2024 & month > 3)) %>% 
   filter(!(year == 2016 & month < 5)) %>% 
@@ -562,6 +578,11 @@ disaster_SDN %>%
   filter(!(year == 2018 & month < 6)) %>% 
   pull(`Disaster Type`) %>% table
 disaster_COD %>% 
+  filter(year > 2016 - 1) %>% 
+  filter(!(year == 2023 & month > 8)) %>% 
+  filter(!(year == 2016 & month < 6)) %>% 
+  pull(`Disaster Type`) %>% table
+disaster_SOM %>% 
   filter(year > 2016 - 1) %>% 
   filter(!(year == 2023 & month > 8)) %>% 
   filter(!(year == 2016 & month < 6)) %>% 
@@ -601,6 +622,8 @@ reg_result_SDN <- lm(`Phase_3+ratio_t`~.-IPC_diff-year-month, data=lagged_reg_da
                        select(-(c_n_events_etc._t_diff:log_fatal_Battles_explosions_t_diff), -n_disaster1_t, -n_disaster2_t))
 reg_result_COD <- lm(`Phase_3+ratio_t`~.-IPC_diff-year-month, data=lagged_reg_data_list_COD[[month_lag_]]$lagged_reg_data %>% 
                        select(-(c_n_events_etc._t_diff:log_fatal_Battles_explosions_t_diff), -n_disaster1_t, -n_disaster2_t))
+reg_result_SOM <- lm(`Phase_3+ratio_t`~.-IPC_diff-year-month, data=lagged_reg_data_list_SOM[[month_lag_]]$lagged_reg_data %>% 
+                       select(-(c_n_events_etc._t_diff:log_fatal_Battles_explosions_t_diff), -n_disaster1_t, -n_disaster2_t))
 
 reg_result_AFG_conflict_diff <- lm(`Phase_3+ratio_t`~.-IPC_diff-year-month, data=lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data %>%
                        select(-(c_n_events_etc._t:log_fatal_Battles_explosions_t), -n_disaster1_t, -n_disaster2_t))
@@ -608,6 +631,8 @@ reg_result_SDN_conflict_diff <- lm(`Phase_3+ratio_t`~.-IPC_diff-year-month, data
                        select(-(c_n_events_etc._t:log_fatal_Battles_explosions_t), -n_disaster1_t, -n_disaster2_t))
 reg_result_COD_conflict_diff <- lm(`Phase_3+ratio_t`~.-IPC_diff-year-month, data=lagged_reg_data_list_COD[[month_lag_]]$lagged_reg_data %>% 
                        select(-(c_n_events_etc._t:log_fatal_Battles_explosions_t), -n_disaster1_t, -n_disaster2_t))
+reg_result_SOM_conflict_diff <- lm(`Phase_3+ratio_t`~.-IPC_diff-year-month, data=lagged_reg_data_list_SOM[[month_lag_]]$lagged_reg_data %>% 
+                                     select(-(c_n_events_etc._t:log_fatal_Battles_explosions_t), -n_disaster1_t, -n_disaster2_t))
 
 reg_result_AFG_all_diff <- lm(IPC_diff~.-year-month, data=lagged_reg_data_list_AFG[[month_lag_]]$lagged_reg_data[,-(1:3)] %>%
                                      select(-(c_n_events_etc._t:log_fatal_Battles_explosions_t), -n_disaster1_t, -n_disaster2_t))
@@ -615,18 +640,23 @@ reg_result_SDN_all_diff <- lm(IPC_diff~.-year-month, data=lagged_reg_data_list_S
                                      select(-(c_n_events_etc._t:log_fatal_Battles_explosions_t), -n_disaster1_t, -n_disaster2_t))
 reg_result_COD_all_diff <- lm(IPC_diff~.-year-month, data=lagged_reg_data_list_COD[[month_lag_]]$lagged_reg_data[,-(1:3)] %>% 
                                      select(-(c_n_events_etc._t:log_fatal_Battles_explosions_t), -n_disaster1_t, -n_disaster2_t))
+reg_result_SOM_all_diff <- lm(IPC_diff~.-year-month, data=lagged_reg_data_list_SOM[[month_lag_]]$lagged_reg_data[,-(1:3)] %>% 
+                                select(-(c_n_events_etc._t:log_fatal_Battles_explosions_t), -n_disaster1_t, -n_disaster2_t))
 
 reg_result_AFG %>% summary()
 reg_result_SDN %>% summary()
 reg_result_COD %>% summary()
+reg_result_SOM %>% summary()
 
 reg_result_AFG_conflict_diff %>% summary()
 reg_result_SDN_conflict_diff %>% summary()
 reg_result_COD_conflict_diff %>% summary()
+reg_result_SOM_conflict_diff %>% summary()
 
 reg_result_AFG_all_diff %>% summary()
 reg_result_SDN_all_diff %>% summary()
 reg_result_COD_all_diff %>% summary()
+reg_result_SOM_all_diff %>% summary()
 
 reg_result_AFG$model %>%
   mutate(residual=reg_result_AFG$residuals,
